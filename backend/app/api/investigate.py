@@ -39,10 +39,19 @@ async def run_investigation(case_id: str, db: Session = Depends(get_db)):
     case.status = CaseStatus.INVESTIGATING
 
     # 1. Gather 4-hop multi-entity evidence via TinyFish Orchestrator
+    primary_item = None
+    billed_unit_price = None
+    if case.invoice.line_items and len(case.invoice.line_items) > 0:
+        first_item = case.invoice.line_items[0]
+        primary_item = first_item.description
+        billed_unit_price = first_item.unit_price
+
     evidence_items, directors, address_cluster, litigation_meta = await orchestrator.execute_investigation(
         supplier_name=case.invoice.supplier_name,
         gstin=case.invoice.gstin,
-        address=case.invoice.billing_address
+        address=case.invoice.billing_address,
+        primary_item=primary_item,
+        billed_unit_price=billed_unit_price
     )
     case.evidence_items = evidence_items
     case.source_mode = orchestrator.source_mode

@@ -9,6 +9,7 @@ from ...schemas.enums import ExtractionStatus
 from ..validators.gstin_validator import validate_gstin_format
 from ..validators.arithmetic_validator import validate_invoice_arithmetic
 from .ocr_fallback import process_scanned_pdf, is_page_likely_scanned
+from .vendor_master import hash_bank_account, check_bank_mutation, calculate_beneficiary_match
 
 # Regex Patterns
 GSTIN_PATTERN = re.compile(r"\b([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1})\b")
@@ -20,6 +21,15 @@ BUYER_GSTIN_PATTERN = re.compile(
     r"(?:Buyer|Customer|Client|Bill\s*To|Consignee)\s*GSTIN(?:/UIN)?[\s:]*([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1})",
     re.IGNORECASE
 )
+
+IRN_PATTERN = re.compile(r"\b([0-9a-fA-F]{64})\b")
+EWAY_BILL_PATTERN = re.compile(r"(?:e-?Way\s*Bill(?:\s*No\.?)?|EWB[\s.:]*)\s*([0-9]{12})", re.IGNORECASE)
+VEHICLE_NUM_PATTERN = re.compile(r"Vehicle\s*No[\s.:]*([A-Z]{2}[0-9]{1,2}[A-Z]{1,2}[0-9]{4})", re.IGNORECASE)
+BENEFICIARY_NAME_PATTERN = re.compile(
+    r"(?:Beneficiary(?:\s*Name)?|Account\s*Name|A/C\s*Holder)[\s.:]+([A-Za-z0-9&.,\-\s]{3,60}?)(?:\n|$|,)",
+    re.IGNORECASE
+)
+
 
 INVOICE_NUM_PATTERN = re.compile(
     r"(?:Tax\s*Invoice\s*No\.?|Invoice\s*(?:No|Number|#)[\s.:]*|Bill\s*(?:No|Number|#)?[\s.:]*|INV[-/])\s*([A-Z0-9\-_/]+)",
@@ -409,7 +419,23 @@ def parse_invoice_text(
 
     # 6. Bank Account & IFSC
     acc_match = ACCOUNT_NUM_PATTERN.search(text)
-    bank_account_masked = mask_bank_account(acc_match.group(1)) if acc_match else None
+    raw_bank_account = acc_match.group(1) if acc_match else None
+    bank_account_masked = mask_bank_account(raw_bank_account) if raw_bank_account else None
+    bank_account_hash = hash_bank_account(raw_bank_account)
+    
+    ifsc_match = IFSC_PATTERN.search(text)
+    ifsc_code = ifsc_match.group(1).upper() if ifsc_match else None
+
+    # Anti-BEC Bank Account Mutation Check
+    bank_mutation_detected, known_masked, mutation_msg = check_bank_mutation(gstin, raw_bank_account, ifsc_code)
+    if bank_mutation_detected and mutation_msg:
+        warnings.append(mutation_msg)
+
+    # Beneficiary Name Match
+    ben_match = BENEFICIARY_NAME_PATTERN.search(text)
+    bank_beneficiary_name = ben_match.group(1).strip() if ben_match else None
+    beneficiary_name_match_score = calculate_beneficiary_match(bank_beneficiary_name, legal_name, supplier_name)
+
     if bank_account_masked:
         extraction_meta["bank_account"] = FieldExtractionMeta(
             status=ExtractionStatus.EXTRACTED,
@@ -422,8 +448,6 @@ def parse_invoice_text(
             confidence=0.0
         )
 
-    ifsc_match = IFSC_PATTERN.search(text)
-    ifsc_code = ifsc_match.group(1).upper() if ifsc_match else None
     if ifsc_code:
         extraction_meta["ifsc_code"] = FieldExtractionMeta(
             status=ExtractionStatus.EXTRACTED,
@@ -622,7 +646,25 @@ def parse_invoice_text(
     # 9. Line Items from text
     line_items = extract_line_items_from_text(text)
 
-    # 10. Format & Arithmetic Validations
+    # 10. Transit Proof & Physical Supply Checks (CGST Sec 16(2)(b))
+    irn_match = IRN_PATTERN.search(text)
+    irn_hash = irn_match.group(1).lower() if irn_match else None
+
+    ewb_match = EWAY_BILL_PATTERN.search(text)
+    eway_bill_no = ewb_match.group(1) if ewb_match else None
+
+    veh_match = VEHICLE_NUM_PATTERN.search(text)
+    vehicle_no = veh_match.group(1).upper() if veh_match else None
+
+    eway_bill_required = False
+    eway_bill_missing = False
+    if total_amount > 50000.0:
+        eway_bill_required = True
+        if not eway_bill_no:
+            eway_bill_missing = True
+            warnings.append("e-Way Bill mandatory under CGST Rules for consignment > ₹50,000 but not found in invoice.")
+
+    # 11. Format & Arithmetic Validations
     gstin_valid, _ = validate_gstin_format(gstin) if gstin else (False, "Missing GSTIN")
     arith_valid, arith_notes = validate_invoice_arithmetic(
         taxable_amount=taxable_amount,
@@ -664,8 +706,17 @@ def parse_invoice_text(
         total_amount=total_amount,
         tax_breakdown=tax_breakdown,
         bank_account_masked=bank_account_masked,
+        bank_account_hash=bank_account_hash,
+        bank_beneficiary_name=bank_beneficiary_name,
+        bank_mutation_detected=bank_mutation_detected,
+        beneficiary_name_match_score=beneficiary_name_match_score,
         ifsc_code=ifsc_code,
         line_items=line_items,
+        irn_hash=irn_hash,
+        eway_bill_no=eway_bill_no,
+        vehicle_no=vehicle_no,
+        eway_bill_required=eway_bill_required,
+        eway_bill_missing=eway_bill_missing,
         gstin_format_valid=gstin_valid,
         arithmetic_valid=arith_valid,
         arithmetic_notes=arith_notes,

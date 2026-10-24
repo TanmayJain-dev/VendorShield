@@ -28,7 +28,15 @@ export default function IntakePage() {
   const [totalAmount, setTotalAmount] = useState('482500.00');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedScenario, setSelectedScenario] = useState<'benchmark' | 'ghost' | null>('benchmark');
+  const [selectedScenario, setSelectedScenario] = useState<'havells' | 'benchmark' | 'ghost' | null>('havells');
+
+  const loadHavellsLivePreset = () => {
+    setSupplierName('Havells Industrial Electricals');
+    setGstin('07AAACH0828A1ZE');
+    setInvoiceNumber('INV-2026-9901');
+    setTotalAmount('498550.00');
+    setSelectedScenario('havells');
+  };
 
   const loadBenchmarkPreset = () => {
     setSupplierName('Apex Courier');
@@ -67,7 +75,7 @@ export default function IntakePage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-
+  
     try {
       const formData = new FormData();
       if (file) formData.append('file', file);
@@ -105,10 +113,10 @@ export default function IntakePage() {
             <span>Back to Cases Queue</span>
           </Link>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Supplier Invoice Intake
+            Supplier Invoice Intake & Pre-Disbursal Gate
           </h1>
           <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1 max-w-xl leading-relaxed">
-            Extract claims from an accounts payable invoice or populate details manually for autonomous due-diligence verification.
+            Autonomous 4-hop forensic audit powered by TinyFish Live Web Agents. Reconciles GSTR-3B filings, NCLT dockets, DGGI enforcement radar, and IndiaMART wholesale prices.
           </p>
         </div>
 
@@ -116,31 +124,53 @@ export default function IntakePage() {
         <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-xl p-4 sm:p-5 space-y-3 shadow-subtle">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
-              Benchmark Verification Presets
+              1-Click Enterprise Audit Scenarios
             </span>
-            <span className="text-[11px] text-zinc-400 font-mono">1-Click Evaluation Scenarios</span>
+            <span className="text-[11px] text-zinc-400 font-mono">Live TinyFish SSE Ready</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Scenario 0: Havells Live Enterprise Preset */}
+            <button
+              type="button"
+              onClick={loadHavellsLivePreset}
+              className={`p-3 text-left rounded-xl border text-xs transition-all ${
+                selectedScenario === 'havells'
+                  ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30 ring-1 ring-indigo-500/30'
+                  : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
+              }`}
+            >
+              <div className="flex items-center justify-between font-bold text-zinc-900 dark:text-zinc-100">
+                <span className="font-mono text-[10px]">INV-2026-9901</span>
+                <span className="text-[10px] font-mono font-bold text-indigo-700 dark:text-indigo-400">₹4,98,550</span>
+              </div>
+              <div className="text-[11px] font-semibold text-zinc-800 dark:text-zinc-200 mt-1 truncate">
+                Havells India Ltd
+              </div>
+              <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-snug">
+                Real GSTIN (07AAACH0828A1ZE) + IndiaMART copper cable benchmark.
+              </div>
+            </button>
+
             {/* Scenario 1: Apex Courier Benchmark */}
             <button
               type="button"
               onClick={loadBenchmarkPreset}
-              className={`p-3.5 text-left rounded-xl border text-xs transition-all ${
+              className={`p-3 text-left rounded-xl border text-xs transition-all ${
                 selectedScenario === 'benchmark'
                   ? 'border-teal-600 dark:border-teal-500 bg-teal-50/50 dark:bg-teal-950/30 ring-1 ring-teal-500/30'
                   : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
               }`}
             >
               <div className="flex items-center justify-between font-bold text-zinc-900 dark:text-zinc-100">
-                <span className="font-mono">INV-2026-8841</span>
-                <span className="text-[11px] font-mono font-bold text-teal-700 dark:text-teal-400">₹4,82,500</span>
+                <span className="font-mono text-[10px]">INV-2026-8841</span>
+                <span className="text-[10px] font-mono font-bold text-teal-700 dark:text-teal-400">₹4,82,500</span>
               </div>
-              <div className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 mt-1">
+              <div className="text-[11px] font-semibold text-zinc-800 dark:text-zinc-200 mt-1 truncate">
                 Apex Courier Pvt Ltd
               </div>
-              <div className="text-[10.5px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                Active GSTIN with trade alias discrepancy (Manual Review).
+              <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-snug">
+                Trade alias discrepancy & MSME 43B(h) Split Escrow hold.
               </div>
             </button>
 
@@ -148,21 +178,21 @@ export default function IntakePage() {
             <button
               type="button"
               onClick={loadGhostVendorPreset}
-              className={`p-3.5 text-left rounded-xl border text-xs transition-all ${
+              className={`p-3 text-left rounded-xl border text-xs transition-all ${
                 selectedScenario === 'ghost'
                   ? 'border-rose-600 dark:border-rose-500 bg-rose-50/50 dark:bg-rose-950/30 ring-1 ring-rose-500/30'
                   : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
               }`}
             >
               <div className="flex items-center justify-between font-bold text-zinc-900 dark:text-zinc-100">
-                <span className="font-mono">INV-2026-8842</span>
-                <span className="text-[11px] font-mono font-bold text-rose-700 dark:text-rose-400">₹2,95,000</span>
+                <span className="font-mono text-[10px]">INV-2026-8842</span>
+                <span className="text-[10px] font-mono font-bold text-rose-700 dark:text-rose-400">₹2,95,000</span>
               </div>
-              <div className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 mt-1">
-                Specter Cloud Technologies
+              <div className="text-[11px] font-semibold text-zinc-800 dark:text-zinc-200 mt-1 truncate">
+                Specter Cloud Shell
               </div>
-              <div className="text-[10.5px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                Ghost vendor with zero public registry footprint (Critical Block).
+              <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-snug">
+                NCLT petition & 38-firm ghost hub (Forensic Freeze).
               </div>
             </button>
           </div>

@@ -125,7 +125,13 @@ async def submit_review_decision(
         )
 
     # 4. Determine target state based on review action
-    if review_in.action in (ReviewActionType.APPROVE, ReviewActionType.APPROVE_WITH_EXCEPTION, ReviewActionType.REJECT):
+    if review_in.action in (
+        ReviewActionType.APPROVE,
+        ReviewActionType.APPROVE_WITH_EXCEPTION,
+        ReviewActionType.EXECUTE_SPLIT_PAYOUT,
+        ReviewActionType.REJECT,
+        ReviewActionType.FORENSIC_FREEZE
+    ):
         target_status = CaseStatus.RESOLVED
     elif review_in.action == ReviewActionType.REQUEST_DOCUMENTS:
         target_status = CaseStatus.PENDING_DOCUMENTS

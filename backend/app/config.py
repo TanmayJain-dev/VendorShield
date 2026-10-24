@@ -47,12 +47,14 @@ class Settings(BaseSettings):
     REVIEWER_DEV_MODE: bool = True
     DEV_REVIEWER_TOKEN: str = os.getenv("DEV_REVIEWER_TOKEN", "vendorshield-dev-review-token-2026")
 
-    # TinyFish API Key (Optional: fallbacks to SIMULATED if unset)
+    # TinyFish API Key & Endpoints
     TINYFISH_API_KEY: str = os.getenv("TINYFISH_API_KEY", "")
-    TINYFISH_API_URL: str = "https://agent.tinyfish.ai/v1/automation/run"
+    TINYFISH_API_URL: str = os.getenv("TINYFISH_API_URL", "https://agent.tinyfish.ai/v1/automation/run")
+    TINYFISH_SSE_URL: str = os.getenv("TINYFISH_SSE_URL", "https://agent.tinyfish.ai/v1/automation/run-sse")
+    TINYFISH_MODE: str = os.getenv("TINYFISH_MODE", "live" if os.getenv("TINYFISH_API_KEY") else "simulated")
     
     # Rules
-    RULES_VERSION: str = "2.0.0"
+    RULES_VERSION: str = "2.1.0"
 
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":

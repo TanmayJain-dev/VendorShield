@@ -17,6 +17,10 @@ class EvidenceItem(BaseModel):
     facts: Dict[str, Any] = Field(default_factory=dict)
     is_authoritative: bool = False
     match_rationale: Optional[str] = None
+    streaming_url: Optional[str] = None
+    run_id: Optional[str] = None
+    hop_number: Optional[int] = None
+    hop_title: Optional[str] = None
 
 class FieldCheckResult(BaseModel):
     check_id: str

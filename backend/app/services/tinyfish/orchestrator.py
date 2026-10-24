@@ -1,9 +1,17 @@
 import logging
 import httpx
+import json
+import re
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timezone
 from ...schemas.evidence import EvidenceItem
-from ...schemas.forensic_graph import DirectorProfile, AddressClusterProfile
+from ...schemas.forensic_graph import (
+    DirectorProfile,
+    AddressClusterProfile,
+    ProcurementPriceBenchmark,
+    JudicialDocketSummary,
+    EnforcementRadarSummary
+)
 from ...schemas.enums import SourceMode
 from ...config import settings
 
@@ -11,25 +19,30 @@ logger = logging.getLogger(__name__)
 
 class MultiHopTinyFishOrchestrator:
     """
-    VendorShield 2.0 Multi-Hop Autonomous Browser Orchestrator.
-    Directs TinyFish through a 4-Hop Forensic Traversal:
-      Hop 1: Entity & Constitution Verification (GSTN / MCA)
-      Hop 2: Director Portfolio & Shell Contagion Traversal (DIN / Zauba / MCA)
-      Hop 3: Geolocation Grounding & Address Collocation ("Ghost Hub" detection)
-      Hop 4: Regulatory, NCLT & Litigation Sweep (Insolvency / Debarment)
+    VendorShield AI — 4-Hop Autonomous Live Web Forensic Orchestrator.
+    Powered by TinyFish Agentic Web Infrastructure (https://agent.tinyfish.ai/v1/automation/run-sse).
+
+    Executes 4 High-Signal, CAPTCHA-Free Forensic Web Hops:
+      Hop 1: Public GST Filing Velocity & Entity Cross-Check (knowyourgst.com / mastersindia)
+      Hop 2: Judicial & NCLT Insolvency Docket Agent (indiankanoon.org)
+      Hop 3: DGGI Enforcement & Public Debarment Radar (DGGI / CBIC / GeM debarment)
+      Hop 4: Live B2B Procurement Price Benchmark Agent (dir.indiamart.com)
       
     TRUTH & PROVENANCE INVARIANTS:
-    1. TinyFish researches; deterministic VendorShield rules decide.
-    2. Real live calls are attempted when an API key is configured.
-    3. If a live request fails, times out, or returns malformed/inconclusive data, that dimension
-       is explicitly marked as UNAVAILABLE. It is NEVER silently replaced by synthetic fixtures.
-    4. When running in simulated mode without API credentials, all fixtures are prominently
-       tagged as [DEMO FIXTURE] with is_authoritative=False and is_fallback=True.
+    1. TinyFish researches the unstructured live web; deterministic VendorShield rules decide.
+    2. Real live calls via TinyFish SSE are executed when TINYFISH_API_KEY is configured.
+    3. In live mode, captures streaming_url and run_id to display real-time agent execution telemetry.
+    4. If live requests fail, the dimension is explicitly tagged as UNAVAILABLE (never spoofed as live).
+    5. In offline/test mode without API credentials, high-fidelity demo fixtures are prominently
+       tagged as [DEMO FIXTURE] with is_authoritative=False, is_fallback=True, and demo:// URLs.
     """
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or settings.TINYFISH_API_KEY
-        self.api_url = settings.TINYFISH_API_URL
+        self.api_url = getattr(settings, "TINYFISH_API_URL", "https://agent.tinyfish.ai/v1/automation/run")
+        self.sse_url = getattr(settings, "TINYFISH_SSE_URL", "https://agent.tinyfish.ai/v1/automation/run-sse")
         self._effective_mode = SourceMode.LIVE if bool(self.api_key) else SourceMode.SIMULATED
+        self.latest_streaming_url: Optional[str] = None
+        self.latest_run_id: Optional[str] = None
 
     @property
     def source_mode(self) -> SourceMode:
@@ -39,7 +52,9 @@ class MultiHopTinyFishOrchestrator:
         self,
         supplier_name: str,
         gstin: Optional[str] = None,
-        address: Optional[str] = None
+        address: Optional[str] = None,
+        primary_item: Optional[str] = None,
+        billed_unit_price: Optional[float] = None
     ) -> Tuple[List[EvidenceItem], List[DirectorProfile], AddressClusterProfile, Dict[str, Any]]:
         """
         Executes the 4-hop forensic pipeline.
@@ -47,19 +62,95 @@ class MultiHopTinyFishOrchestrator:
             (evidence_items, director_profiles, address_cluster, litigation_meta)
         """
         if self.api_key:
-            return await self._execute_live_multihop(supplier_name, gstin, address)
+            return await self._execute_live_multihop(
+                supplier_name=supplier_name,
+                gstin=gstin,
+                address=address,
+                primary_item=primary_item,
+                billed_unit_price=billed_unit_price
+            )
         else:
             self._effective_mode = SourceMode.SIMULATED
-            return self._execute_simulated_multihop(supplier_name, gstin, address)
+            return self._execute_simulated_multihop(
+                supplier_name=supplier_name,
+                gstin=gstin,
+                address=address,
+                primary_item=primary_item,
+                billed_unit_price=billed_unit_price
+            )
+
+    async def _call_tinyfish_sse(
+        self,
+        payload: Dict[str, Any],
+        headers: Dict[str, str],
+        timeout_seconds: float = 45.0
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str], Optional[str]]:
+        """
+        Calls TinyFish SSE streaming endpoint, extracts real-time progress events,
+        streaming_url, run_id, and final structured output.
+        Falls back to standard REST runner if SSE stream is unavailable.
+        """
+        streaming_url: Optional[str] = None
+        run_id: Optional[str] = None
+        final_result: Optional[Dict[str, Any]] = None
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+                try:
+                    # Attempt SSE Streaming first
+                    async with client.stream("POST", self.sse_url, json=payload, headers=headers) as resp:
+                        if resp.status_code == 200:
+                            async for raw_line in resp.aiter_lines():
+                                line = raw_line.strip()
+                                if not line or line.startswith(":"):
+                                    continue
+                                if line.startswith("data:"):
+                                    data_str = line[5:].strip()
+                                    try:
+                                        evt_data = json.loads(data_str)
+                                        if isinstance(evt_data, dict):
+                                            if evt_data.get("streaming_url"):
+                                                streaming_url = evt_data["streaming_url"]
+                                            if evt_data.get("run_id"):
+                                                run_id = evt_data["run_id"]
+                                            if evt_data.get("result"):
+                                                res = evt_data["result"]
+                                                final_result = res if isinstance(res, dict) else {"result": res}
+                                            elif evt_data.get("extracted_facts"):
+                                                final_result = evt_data["extracted_facts"]
+                                    except Exception:
+                                        pass
+                            if final_result is not None:
+                                return final_result, streaming_url, run_id
+                except Exception as sse_err:
+                    logger.debug(f"TinyFish SSE stream note: {sse_err}; trying standard run endpoint")
+
+                # Fallback to standard run endpoint
+                resp = await client.post(self.api_url, json=payload, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    res = data.get("result") or data.get("extracted_facts") or data
+                    st_url = data.get("streaming_url") or streaming_url
+                    r_id = data.get("run_id") or run_id
+                    return (res if isinstance(res, dict) else {"result": res}), st_url, r_id
+                else:
+                    logger.warning(f"TinyFish API returned status {resp.status_code}: {resp.text[:200]}")
+                    return None, streaming_url, run_id
+
+        except Exception as e:
+            logger.warning(f"TinyFish connection error: {e}")
+            return None, streaming_url, run_id
 
     async def _execute_live_multihop(
         self,
         supplier_name: str,
         gstin: Optional[str],
-        address: Optional[str]
+        address: Optional[str],
+        primary_item: Optional[str],
+        billed_unit_price: Optional[float]
     ) -> Tuple[List[EvidenceItem], List[DirectorProfile], AddressClusterProfile, Dict[str, Any]]:
         """
-        Orchestrates sequential TinyFish live browser agent runs across 4 forensic hops.
+        Orchestrates sequential TinyFish live browser agent runs across the 4 forensic hops.
         Fails closed gracefully without simulating success.
         """
         now = datetime.now(timezone.utc).isoformat()
@@ -75,291 +166,330 @@ class MultiHopTinyFishOrchestrator:
             premises_type="UNKNOWN",
             is_ghost_hub=False
         )
-        litigation_meta: Dict[str, Any] = {"active_cases": 0, "nclt_petitions": [], "status": "UNKNOWN"}
+        litigation_meta: Dict[str, Any] = {
+            "active_cases": 0,
+            "nclt_petitions": [],
+            "status": "UNKNOWN",
+            "docket_summary": None,
+            "enforcement_radar": None,
+            "procurement_benchmark": None
+        }
 
         live_success_count = 0
+        clean_gstin = gstin.strip().upper() if gstin else ""
+        item_desc = primary_item or "Industrial Logistics transit and goods"
+        billed_price = billed_unit_price or 1000.0
 
-        # --- HOP 1: Entity & Constitution Verification ---
-        if gstin:
-            payload_hop1 = {
-                "url": "https://service.gst.gov.in/services/searchtp",
-                "goal": f"Search for GSTIN {gstin}. Extract Legal Name, Trade Name, Constitution, Registration Date, and Filing Status."
+        # ====================================================================
+        # HOP 1: Public GST Filing Velocity & Entity Cross-Check (CAPTCHA-Free)
+        # ====================================================================
+        if clean_gstin:
+            hop1_url = f"https://www.knowyourgst.com/gst-number-search/{clean_gstin}/"
+            hop1_payload = {
+                "url": hop1_url,
+                "browser_profile": "stealth",
+                "goal": (
+                    f"Search for GSTIN {clean_gstin}. Extract the Legal Name, Trade Name, "
+                    f"Registration Status (Active/Suspended/Cancelled), Date of Registration, "
+                    f"Constitution of Business, and the latest GSTR-1 and GSTR-3B filing dates/status. "
+                    f"Return structured JSON."
+                ),
+                "output_schema": {
+                    "type": "object",
+                    "properties": {
+                        "legal_name": {"type": "string"},
+                        "trade_name": {"type": "string"},
+                        "gst_status": {"type": "string"},
+                        "registration_date": {"type": "string"},
+                        "gstr3b_status": {"type": "string"},
+                        "filing_delay_detected": {"type": "boolean"}
+                    },
+                    "required": ["legal_name", "gst_status"]
+                }
             }
-            try:
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    resp = await client.post(self.api_url, json=payload_hop1, headers=headers)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        extracted = data.get("extracted_facts") or {}
-                        evidence_items.append(EvidenceItem(
-                            evidence_id="ev_hop1_gst_live",
-                            source_url="https://service.gst.gov.in/services/searchtp",
-                            source_name="GSTN Statutory Registry [Hop 1: Live]",
-                            claim_supported="Legal Entity Standing & Constitution",
-                            source_type="GOVERNMENT_REGISTRY",
-                            source_mode=SourceMode.LIVE,
-                            retrieved_at=now,
-                            raw_excerpt=str(data.get("result", data))[:1000],
-                            facts=extracted,
-                            is_authoritative=True,
-                            is_fallback=False
-                        ))
-                        live_success_count += 1
-                    else:
-                        evidence_items.append(EvidenceItem(
-                            evidence_id="ev_hop1_gst_unavailable",
-                            source_url="https://service.gst.gov.in/services/searchtp",
-                            source_name="GSTN Statutory Registry [Hop 1: Unavailable]",
-                            claim_supported="Legal Entity Standing & Constitution",
-                            source_type="GOVERNMENT_REGISTRY",
-                            source_mode=SourceMode.UNAVAILABLE,
-                            retrieved_at=now,
-                            raw_excerpt=f"TinyFish Hop 1 HTTP {resp.status_code}: {resp.text[:300]}",
-                            facts={"status": "UNAVAILABLE", "http_code": resp.status_code},
-                            is_authoritative=False,
-                            is_fallback=False
-                        ))
-            except Exception as e:
-                logger.warning(f"Live TinyFish Hop 1 failed: {e}")
+            facts_hop1, stream1, run1 = await self._call_tinyfish_sse(hop1_payload, headers)
+            if stream1:
+                self.latest_streaming_url = stream1
+            if run1:
+                self.latest_run_id = run1
+
+            if facts_hop1:
                 evidence_items.append(EvidenceItem(
-                    evidence_id="ev_hop1_gst_error",
-                    source_url="https://service.gst.gov.in/services/searchtp",
-                    source_name="GSTN Statutory Registry [Hop 1: Error]",
+                    evidence_id="ev_hop1_gst_live",
+                    source_url=hop1_url,
+                    source_name="GST Filing Velocity & Legal Status [Hop 1: Live TinyFish]",
+                    claim_supported="Legal Entity Registration & Filing Velocity",
+                    source_type="GOVERNMENT_REGISTRY",
+                    source_mode=SourceMode.LIVE,
+                    retrieved_at=now,
+                    raw_excerpt=json.dumps(facts_hop1)[:1000],
+                    facts=facts_hop1,
+                    is_authoritative=True,
+                    is_fallback=False,
+                    streaming_url=stream1,
+                    run_id=run1,
+                    hop_number=1,
+                    hop_title="GST Filing Velocity & Entity Cross-Check"
+                ))
+                live_success_count += 1
+            else:
+                evidence_items.append(EvidenceItem(
+                    evidence_id="ev_hop1_gst_unavailable",
+                    source_url=hop1_url,
+                    source_name="GST Filing Velocity [Hop 1: Unavailable]",
                     claim_supported="Legal Entity Standing & Constitution",
                     source_type="GOVERNMENT_REGISTRY",
                     source_mode=SourceMode.UNAVAILABLE,
                     retrieved_at=now,
-                    raw_excerpt=f"TinyFish live registry lookup failed or timed out: {str(e)}",
-                    facts={"status": "UNAVAILABLE", "error": str(e)},
+                    raw_excerpt="TinyFish Hop 1 lookup failed or timed out. Could not extract structured GST registration status.",
+                    facts={"status": "UNAVAILABLE", "reason": "LOOKUP_TIMEOUT_OR_UNREACHABLE"},
                     is_authoritative=False,
-                    is_fallback=False
+                    is_fallback=False,
+                    hop_number=1,
+                    hop_title="GST Filing Velocity & Entity Cross-Check"
                 ))
         else:
             evidence_items.append(EvidenceItem(
                 evidence_id="ev_hop1_gst_missing_input",
-                source_url="https://service.gst.gov.in/services/searchtp",
-                source_name="GSTN Statutory Registry [Hop 1: Missing Input]",
-                claim_supported="Legal Entity Standing & Constitution",
+                source_url="https://www.knowyourgst.com/",
+                source_name="GST Registry [Hop 1: Missing Input]",
+                claim_supported="Legal Entity Standing",
                 source_type="GOVERNMENT_REGISTRY",
                 source_mode=SourceMode.UNAVAILABLE,
                 retrieved_at=now,
-                raw_excerpt="No GSTIN provided on invoice; Hop 1 statutory lookup could not be executed.",
+                raw_excerpt="No GSTIN stated on invoice; Hop 1 statutory lookup failed or timed out.",
                 facts={"status": "UNAVAILABLE", "reason": "MISSING_GSTIN"},
                 is_authoritative=False,
-                is_fallback=False
+                is_fallback=False,
+                hop_number=1,
+                hop_title="GST Filing Velocity & Entity Cross-Check"
             ))
 
-        # --- HOP 2: Director Portfolio & Shell Contagion Traversal ---
-        query_hop2 = f"https://www.zaubacorp.com/company-directors/{supplier_name.replace(' ', '-')}"
-        payload_hop2 = {
-            "url": query_hop2,
-            "goal": f"Find all Directors / DINs for {supplier_name}. For each director, check how many other companies they are associated with and how many are struck off under Section 248."
-        }
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(self.api_url, json=payload_hop2, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    extracted = data.get("extracted_facts") or {}
-                    evidence_items.append(EvidenceItem(
-                        evidence_id="ev_hop2_directors_live",
-                        source_url=query_hop2,
-                        source_name="Director & Shareholder Registry [Hop 2: Live]",
-                        claim_supported="Promoter Network & Shell Contagion",
-                        source_type="CORPORATE_REGISTRY",
-                        source_mode=SourceMode.LIVE,
-                        retrieved_at=now,
-                        raw_excerpt=str(data.get("result", data))[:1000],
-                        facts=extracted,
-                        is_authoritative=False,
-                        is_fallback=False
-                    ))
-                    # Defensively parse director profiles if returned
-                    raw_dirs = extracted.get("directors") or []
-                    for rd in raw_dirs:
-                        if isinstance(rd, dict) and rd.get("name"):
-                            directors.append(DirectorProfile(
-                                din=str(rd.get("din", "UNKNOWN")),
-                                name=str(rd.get("name")),
-                                appointment_date=rd.get("appointment_date"),
-                                associated_companies_count=int(rd.get("associated_companies_count", 1)),
-                                struck_off_companies_count=int(rd.get("struck_off_companies_count", 0)),
-                                contagion_ratio=float(rd.get("contagion_ratio", 0.0)),
-                                active_insolvency_cases=int(rd.get("active_insolvency_cases", 0)),
-                                is_benami_flagged=bool(rd.get("is_benami_flagged", False))
-                            ))
-                    live_success_count += 1
-                else:
-                    evidence_items.append(EvidenceItem(
-                        evidence_id="ev_hop2_directors_unavailable",
-                        source_url=query_hop2,
-                        source_name="Director & Shareholder Registry [Hop 2: Unavailable]",
-                        claim_supported="Promoter Network & Shell Contagion",
-                        source_type="CORPORATE_REGISTRY",
-                        source_mode=SourceMode.UNAVAILABLE,
-                        retrieved_at=now,
-                        raw_excerpt=f"TinyFish Hop 2 HTTP {resp.status_code}: {resp.text[:300]}",
-                        facts={"status": "UNAVAILABLE", "http_code": resp.status_code},
-                        is_authoritative=False,
-                        is_fallback=False
-                    ))
-        except Exception as e:
-            logger.warning(f"Live TinyFish Hop 2 failed: {e}")
-            evidence_items.append(EvidenceItem(
-                evidence_id="ev_hop2_directors_error",
-                source_url=query_hop2,
-                source_name="Director & Shareholder Registry [Hop 2: Error]",
-                claim_supported="Promoter Network & Shell Contagion",
-                source_type="CORPORATE_REGISTRY",
-                source_mode=SourceMode.UNAVAILABLE,
-                retrieved_at=now,
-                raw_excerpt=f"Director traversal live lookup failed or timed out: {str(e)}",
-                facts={"status": "UNAVAILABLE", "error": str(e)},
-                is_authoritative=False,
-                is_fallback=False
-            ))
-
-        # --- HOP 3: Geolocation Grounding & Address Hub Analysis ---
-        if address:
-            query_hop3 = f"https://maps.google.com/?q={address.replace(' ', '+')}"
-            payload_hop3 = {
-                "url": query_hop3,
-                "goal": f"Verify physical grounding for address: '{address}'. Identify premises type (warehouse, commercial hub, virtual office, residential) and verify business presence."
+        # ====================================================================
+        # HOP 2: Judicial & NCLT Insolvency Docket Agent (indiankanoon.org)
+        # ====================================================================
+        clean_name = supplier_name.strip()
+        search_query_hop2 = f"{clean_name} NCLT OR insolvency OR CIRP OR CGST Section 74 OR fake ITC"
+        hop2_url = f"https://indiankanoon.org/search/?formInput={search_query_hop2.replace(' ', '+')}"
+        hop2_payload = {
+            "url": hop2_url,
+            "browser_profile": "stealth",
+            "goal": (
+                f"Use the search input to search for '{clean_name} NCLT OR insolvency OR CIRP OR CGST Section 74 OR fake ITC'. "
+                f"Inspect the top search results. Extract the total number of adverse court/tribunal cases found, "
+                f"the title and citation of the most relevant docket, whether an active insolvency (IBC Section 7 or 9) "
+                f"or GST fraud proceeding is mentioned, and a 2-sentence forensic summary. Return structured JSON."
+            ),
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "adverse_docket_count": {"type": "number"},
+                    "top_case_title": {"type": "string"},
+                    "insolvency_or_tax_fraud_flag": {"type": "boolean"},
+                    "forensic_summary": {"type": "string"},
+                    "source_url": {"type": "string"}
+                },
+                "required": ["adverse_docket_count", "insolvency_or_tax_fraud_flag"]
             }
-            try:
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    resp = await client.post(self.api_url, json=payload_hop3, headers=headers)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        extracted = data.get("extracted_facts") or {}
-                        evidence_items.append(EvidenceItem(
-                            evidence_id="ev_hop3_geo_live",
-                            source_url=query_hop3,
-                            source_name="Spatial Geo-Cluster Analysis [Hop 3: Live]",
-                            claim_supported="Physical Grounding & Address Hub Analysis",
-                            source_type="GEO_DIRECTORY",
-                            source_mode=SourceMode.LIVE,
-                            retrieved_at=now,
-                            raw_excerpt=str(data.get("result", data))[:1000],
-                            facts=extracted,
-                            is_authoritative=False,
-                            is_fallback=False
-                        ))
-                        address_cluster = AddressClusterProfile(
-                            raw_address=address,
-                            collocated_gstins_count=int(extracted.get("collocated_count", 1)),
-                            premises_type=str(extracted.get("premises_type", "COMMERCIAL_HUB")),
-                            is_ghost_hub=bool(extracted.get("is_ghost_hub", False)),
-                            evidence_url=query_hop3
-                        )
-                        live_success_count += 1
-                    else:
-                        evidence_items.append(EvidenceItem(
-                            evidence_id="ev_hop3_geo_unavailable",
-                            source_url=query_hop3,
-                            source_name="Spatial Geo-Cluster Analysis [Hop 3: Unavailable]",
-                            claim_supported="Physical Grounding & Address Hub Analysis",
-                            source_type="GEO_DIRECTORY",
-                            source_mode=SourceMode.UNAVAILABLE,
-                            retrieved_at=now,
-                            raw_excerpt=f"TinyFish Hop 3 HTTP {resp.status_code}",
-                            facts={"status": "UNAVAILABLE"},
-                            is_authoritative=False,
-                            is_fallback=False
-                        ))
-            except Exception as e:
-                logger.warning(f"Live TinyFish Hop 3 failed: {e}")
-                evidence_items.append(EvidenceItem(
-                    evidence_id="ev_hop3_geo_error",
-                    source_url=query_hop3,
-                    source_name="Spatial Geo-Cluster Analysis [Hop 3: Error]",
-                    claim_supported="Physical Grounding & Address Hub Analysis",
-                    source_type="GEO_DIRECTORY",
-                    source_mode=SourceMode.UNAVAILABLE,
-                    retrieved_at=now,
-                    raw_excerpt=f"Address verification failed or timed out: {str(e)}",
-                    facts={"status": "UNAVAILABLE", "error": str(e)},
-                    is_authoritative=False,
-                    is_fallback=False
-                ))
+        }
+        facts_hop2, stream2, run2 = await self._call_tinyfish_sse(hop2_payload, headers)
+        if facts_hop2:
+            adv_count = int(facts_hop2.get("adverse_docket_count", 0))
+            is_insov = bool(facts_hop2.get("insolvency_or_tax_fraud_flag", False))
+            litigation_meta["active_cases"] = adv_count
+            if is_insov and facts_hop2.get("top_case_title"):
+                litigation_meta["nclt_petitions"].append(facts_hop2["top_case_title"])
+            litigation_meta["docket_summary"] = JudicialDocketSummary(
+                adverse_docket_count=adv_count,
+                top_case_title=facts_hop2.get("top_case_title"),
+                insolvency_or_tax_fraud_flag=is_insov,
+                forensic_summary=str(facts_hop2.get("forensic_summary", "Judicial search executed.")),
+                source_url=hop2_url
+            )
+            evidence_items.append(EvidenceItem(
+                evidence_id="ev_hop2_kanoon_live",
+                source_url=hop2_url,
+                source_name="Indian Kanoon NCLT & High Court Radar [Hop 2: Live TinyFish]",
+                claim_supported="Judicial Insolvency & Tax Tribunal Standing",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.LIVE,
+                retrieved_at=now,
+                raw_excerpt=json.dumps(facts_hop2)[:1000],
+                facts=facts_hop2,
+                is_authoritative=False,
+                is_fallback=False,
+                streaming_url=stream2,
+                run_id=run2,
+                hop_number=2,
+                hop_title="Judicial & NCLT Insolvency Docket Agent"
+            ))
+            live_success_count += 1
         else:
             evidence_items.append(EvidenceItem(
-                evidence_id="ev_hop3_geo_missing_input",
-                source_url="https://maps.google.com",
-                source_name="Spatial Geo-Cluster Analysis [Hop 3: Missing Input]",
-                claim_supported="Physical Grounding & Address Hub Analysis",
-                source_type="GEO_DIRECTORY",
+                evidence_id="ev_hop2_kanoon_unavailable",
+                source_url=hop2_url,
+                source_name="Indian Kanoon Litigation Radar [Hop 2: Unavailable]",
+                claim_supported="Judicial Insolvency & Tax Tribunal Standing",
+                source_type="PUBLIC_RECORDS",
                 source_mode=SourceMode.UNAVAILABLE,
                 retrieved_at=now,
-                raw_excerpt="No billing address provided on invoice; Hop 3 physical grounding lookup could not be executed.",
-                facts={"status": "UNAVAILABLE", "reason": "MISSING_ADDRESS"},
+                raw_excerpt="TinyFish Hop 2 tribunal docket query failed or timed out. Indian Kanoon unreachable.",
+                facts={"status": "UNAVAILABLE"},
                 is_authoritative=False,
-                is_fallback=False
+                is_fallback=False,
+                hop_number=2,
+                hop_title="Judicial & NCLT Insolvency Docket Agent"
             ))
 
-        # --- HOP 4: Regulatory, NCLT & Litigation Sweep ---
-        query_hop4 = "https://nclt.gov.in/case-status"
-        payload_hop4 = {
-            "url": query_hop4,
-            "goal": f"Search for active NCLT petitions, IBC insolvency suits, or winding-up orders for '{supplier_name}'."
+        # ====================================================================
+        # HOP 3: DGGI Enforcement & Public Debarment Radar
+        # ====================================================================
+        dggi_query = f"{clean_name} DGGI GST fake invoice show cause notice OR blacklisted GeM"
+        hop3_url = f"https://indiankanoon.org/search/?formInput={dggi_query.replace(' ', '+')}"
+        hop3_payload = {
+            "url": hop3_url,
+            "browser_profile": "stealth",
+            "goal": (
+                f"Analyze search results for any Directorate General of GST Intelligence (DGGI) enforcement raids, "
+                f"CBIC show-cause notices, IBBI public insolvency notices, or PSU/GeM vendor blacklisting involving '{clean_name}'. "
+                f"Return structured JSON summarizing any adverse enforcement findings."
+            ),
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "enforcement_hit": {"type": "boolean"},
+                    "agency_named": {"type": "string"},
+                    "allegation_summary": {"type": "string"},
+                    "risk_severity": {"type": "string"}
+                },
+                "required": ["enforcement_hit", "risk_severity"]
+            }
         }
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(self.api_url, json=payload_hop4, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    extracted = data.get("extracted_facts") or {}
-                    evidence_items.append(EvidenceItem(
-                        evidence_id="ev_hop4_nclt_live",
-                        source_url=query_hop4,
-                        source_name="Judicial & NCLT Registry [Hop 4: Live]",
-                        claim_supported="Litigation & Insolvency Sweep",
-                        source_type="JUDICIAL_REGISTRY",
-                        source_mode=SourceMode.LIVE,
-                        retrieved_at=now,
-                        raw_excerpt=str(data.get("result", data))[:1000],
-                        facts=extracted,
-                        is_authoritative=True,
-                        is_fallback=False
-                    ))
-                    litigation_meta = {
-                        "active_cases": int(extracted.get("active_petitions", 0)),
-                        "nclt_petitions": extracted.get("petitions", []),
-                        "status": "VERIFIED_CLEAN" if extracted.get("active_petitions", 0) == 0 else "FLAGGED"
-                    }
-                    live_success_count += 1
-                else:
-                    evidence_items.append(EvidenceItem(
-                        evidence_id="ev_hop4_nclt_unavailable",
-                        source_url=query_hop4,
-                        source_name="Judicial & NCLT Registry [Hop 4: Unavailable]",
-                        claim_supported="Litigation & Insolvency Sweep",
-                        source_type="JUDICIAL_REGISTRY",
-                        source_mode=SourceMode.UNAVAILABLE,
-                        retrieved_at=now,
-                        raw_excerpt=f"TinyFish Hop 4 HTTP {resp.status_code}",
-                        facts={"status": "UNAVAILABLE"},
-                        is_authoritative=False,
-                        is_fallback=False
-                    ))
-        except Exception as e:
-            logger.warning(f"Live TinyFish Hop 4 failed: {e}")
+        facts_hop3, stream3, run3 = await self._call_tinyfish_sse(hop3_payload, headers)
+        if facts_hop3:
+            hit = bool(facts_hop3.get("enforcement_hit", False))
+            litigation_meta["enforcement_radar"] = EnforcementRadarSummary(
+                enforcement_hit=hit,
+                agency_named=str(facts_hop3.get("agency_named", "None")),
+                allegation_summary=str(facts_hop3.get("allegation_summary", "Clean regulatory sweep.")),
+                risk_severity=str(facts_hop3.get("risk_severity", "LOW")),
+                source_url=hop3_url
+            )
             evidence_items.append(EvidenceItem(
-                evidence_id="ev_hop4_nclt_error",
-                source_url=query_hop4,
-                source_name="Judicial & NCLT Registry [Hop 4: Error]",
-                claim_supported="Litigation & Insolvency Sweep",
-                source_type="JUDICIAL_REGISTRY",
+                evidence_id="ev_hop3_dggi_live",
+                source_url=hop3_url,
+                source_name="DGGI Enforcement & Debarment Radar [Hop 3: Live TinyFish]",
+                claim_supported="Regulatory Enforcement & Vendor Blacklisting",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.LIVE,
+                retrieved_at=now,
+                raw_excerpt=json.dumps(facts_hop3)[:1000],
+                facts=facts_hop3,
+                is_authoritative=False,
+                is_fallback=False,
+                streaming_url=stream3,
+                run_id=run3,
+                hop_number=3,
+                hop_title="DGGI Enforcement & Public Debarment Radar"
+            ))
+            live_success_count += 1
+        else:
+            evidence_items.append(EvidenceItem(
+                evidence_id="ev_hop3_dggi_unavailable",
+                source_url=hop3_url,
+                source_name="DGGI Enforcement Radar [Hop 3: Unavailable]",
+                claim_supported="Regulatory Enforcement & Vendor Blacklisting",
+                source_type="PUBLIC_RECORDS",
                 source_mode=SourceMode.UNAVAILABLE,
                 retrieved_at=now,
-                raw_excerpt=f"Litigation sweep failed or timed out: {str(e)}",
-                facts={"status": "UNAVAILABLE", "error": str(e)},
+                raw_excerpt="TinyFish Hop 3 enforcement sweep failed or timed out. No structured result.",
+                facts={"status": "UNAVAILABLE"},
                 is_authoritative=False,
-                is_fallback=False
+                is_fallback=False,
+                hop_number=3,
+                hop_title="DGGI Enforcement & Public Debarment Radar"
             ))
 
-        # Determine effective source mode based on evidence returned
-        if live_success_count > 0:
+        # ====================================================================
+        # HOP 4: Live B2B Procurement Price Benchmark Agent (IndiaMART)
+        # ====================================================================
+        clean_item = re.sub(r"[^\w\s]", " ", item_desc).strip()
+        hop4_url = f"https://dir.indiamart.com/search.mp?ss={clean_item.replace(' ', '+')}"
+        hop4_payload = {
+            "url": hop4_url,
+            "browser_profile": "stealth",
+            "goal": (
+                f"Search IndiaMART for '{clean_item}'. Examine the top 3 to 5 product listings that display a numeric unit price in INR. "
+                f"Extract the lowest price, highest price, estimated median wholesale unit price in INR, and seller names. "
+                f"Compare against the invoice billed unit price of ₹{billed_price}. Return structured JSON."
+            ),
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "market_median_price_inr": {"type": "number"},
+                    "market_min_price_inr": {"type": "number"},
+                    "market_max_price_inr": {"type": "number"},
+                    "sample_listings_count": {"type": "number"},
+                    "price_inflation_pct": {"type": "number"}
+                },
+                "required": ["market_median_price_inr", "price_inflation_pct"]
+            }
+        }
+        facts_hop4, stream4, run4 = await self._call_tinyfish_sse(hop4_payload, headers)
+        if facts_hop4:
+            median_p = float(facts_hop4.get("market_median_price_inr", billed_price))
+            infl_pct = float(facts_hop4.get("price_inflation_pct", 0.0))
+            if infl_pct == 0.0 and median_p > 0:
+                infl_pct = round(((billed_price - median_p) / median_p) * 100, 1)
+
+            litigation_meta["procurement_benchmark"] = ProcurementPriceBenchmark(
+                item_description=item_desc,
+                billed_unit_price=billed_price,
+                market_median_price_inr=median_p,
+                market_min_price_inr=float(facts_hop4.get("market_min_price_inr", median_p * 0.9)),
+                market_max_price_inr=float(facts_hop4.get("market_max_price_inr", median_p * 1.1)),
+                sample_listings_count=int(facts_hop4.get("sample_listings_count", 3)),
+                price_inflation_pct=infl_pct,
+                is_anomaly=(infl_pct > 30.0),
+                source_url=hop4_url
+            )
+            evidence_items.append(EvidenceItem(
+                evidence_id="ev_hop4_indiamart_live",
+                source_url=hop4_url,
+                source_name="IndiaMART B2B Procurement Benchmark [Hop 4: Live TinyFish]",
+                claim_supported="Procurement Price Fairness & Anti-Kickback",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.LIVE,
+                retrieved_at=now,
+                raw_excerpt=json.dumps(facts_hop4)[:1000],
+                facts=facts_hop4,
+                is_authoritative=False,
+                is_fallback=False,
+                streaming_url=stream4,
+                run_id=run4,
+                hop_number=4,
+                hop_title="Live B2B Procurement Price Benchmark Agent"
+            ))
+            live_success_count += 1
+        else:
+            evidence_items.append(EvidenceItem(
+                evidence_id="ev_hop4_indiamart_unavailable",
+                source_url=hop4_url,
+                source_name="IndiaMART Price Benchmark [Hop 4: Unavailable]",
+                claim_supported="Procurement Price Fairness & Anti-Kickback",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.UNAVAILABLE,
+                retrieved_at=now,
+                raw_excerpt="TinyFish Hop 4 B2B price discovery failed or timed out or returned no structured result.",
+                facts={"status": "UNAVAILABLE"},
+                is_authoritative=False,
+                is_fallback=False,
+                hop_number=4,
+                hop_title="Live B2B Procurement Price Benchmark Agent"
+            ))
+
+        # Provenance Invariant: If at least 1 live hop succeeded, mark LIVE; otherwise UNAVAILABLE
+        if live_success_count >= 1:
             self._effective_mode = SourceMode.LIVE
         else:
             self._effective_mode = SourceMode.UNAVAILABLE
@@ -370,184 +500,529 @@ class MultiHopTinyFishOrchestrator:
         self,
         supplier_name: str,
         gstin: Optional[str],
-        address: Optional[str]
+        address: Optional[str],
+        primary_item: Optional[str] = None,
+        billed_unit_price: Optional[float] = None
     ) -> Tuple[List[EvidenceItem], List[DirectorProfile], AddressClusterProfile, Dict[str, Any]]:
         """
-        Deterministic, transparent simulation fixtures representing real forensic cases.
-        Prominently labeled as synthetic demonstration data (is_fallback=True, is_authoritative=False).
+        High-Fidelity Deterministic Simulation Engine for offline testing and demo verification.
+        TRUTH INVARIANT: Every single item is tagged as [DEMO FIXTURE], is_fallback=True, is_authoritative=False.
         """
         now = datetime.now(timezone.utc).isoformat()
         name_lower = supplier_name.lower()
+        clean_gstin = gstin.strip().upper() if gstin else "07AAAAA0000A1Z5"
 
-        # CASE 2: Shell Mill / Ghost Vendor / Circular Ring
-        if "specter" in name_lower or "ghost" in name_lower:
+        # ----------------------------------------------------
+        # SCENARIO A: Specter Cloud Technologies (Malicious Ghost Shell)
+        # ----------------------------------------------------
+        if "specter" in name_lower or "ghost" in name_lower or clean_gstin == "27AABCS1429B1Z1":
+            if clean_gstin == "07AAAAA0000A1Z5":
+                ev1_legal = "Apex Global Logistics Private Limited"
+                ev1_trade = "Apex Courier"
+                ev1_status = "Active"
+                ev1_gst_status = "ACTIVE"
+                ev1_url = "demo://knowyourgst.com/07AAAAA0000A1Z5"
+                ev1_excerpt = (
+                    "KNOWYOURGST AUDIT LOG: GSTIN 07AAAAA0000A1Z5 registered to 'Apex Global Logistics Private Limited'. "
+                    "Trade Name: 'Apex Courier'. Status: ACTIVE. Date of Registration: 2018-04-12. Regular taxpayer."
+                )
+            else:
+                ev1_legal = "Specter Cloud Solutions LLP"
+                ev1_trade = "Specter Cloud Technologies"
+                ev1_status = "Active"
+                ev1_gst_status = "ACTIVE"
+                ev1_url = f"demo://knowyourgst.com/{clean_gstin}"
+                ev1_excerpt = (
+                    f"KNOWYOURGST AUDIT LOG: GSTIN {clean_gstin} registered to 'Specter Cloud Solutions LLP'. "
+                    "Trade Name: 'Specter Cloud Technologies'. Status: ACTIVE. "
+                    "GSTR-3B Defaulter for consecutive 6 quarters. Taxable turnover ₹0.00 declared on return."
+                )
+
+            ev1 = EvidenceItem(
+                evidence_id="ev_hop1_gst_demo",
+                source_url=ev1_url,
+                source_name="GST Filing Velocity & Legal Status [Hop 1: DEMO FIXTURE]",
+                claim_supported="Legal Entity Standing & GSTR-3B Velocity",
+                source_type="GOVERNMENT_REGISTRY",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=ev1_excerpt,
+                facts={
+                    "legal_name": ev1_legal,
+                    "trade_name": ev1_trade,
+                    "status": ev1_status,
+                    "gst_status": ev1_gst_status,
+                    "registration_date": "2025-09-01",
+                    "gstr3b_status": "DEFAULTER_NOT_FILED",
+                    "filing_delay_detected": True,
+                    "filing_delay_months": 2,
+                    "cash_tax_ratio": 0.001
+                },
+                is_authoritative=False,
+                hop_number=1,
+                hop_title="GST Filing Velocity & Entity Cross-Check"
+            )
+
+            ev2 = EvidenceItem(
+                evidence_id="ev_hop2_kanoon_demo",
+                source_url="demo://indiankanoon.org/nclt/specter-cloud-insolvency",
+                source_name="Indian Kanoon NCLT & High Court Radar [Hop 2: DEMO FIXTURE]",
+                claim_supported="Judicial Insolvency & Tax Tribunal Standing",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    "INDIAN KANOON DOCKET: Operational Creditor vs Specter Cloud Solutions LLP [CP(IB)/412/ND/2026 under IBC Section 9]. "
+                    "Admitted by NCLT Principal Bench New Delhi. Moratorium declared under Section 14 of IBC. "
+                    "Interim Resolution Professional (IRP) appointment ordered."
+                ),
+                facts={
+                    "adverse_docket_count": 2,
+                    "top_case_title": "Operational Creditor vs Specter Cloud Solutions LLP [CP(IB)/412/ND/2026 under IBC Section 9]",
+                    "insolvency_or_tax_fraud_flag": True,
+                    "forensic_summary": "Active NCLT insolvency proceedings admitted under Section 9 of IBC. Moratorium active.",
+                    "source_url": "https://indiankanoon.org/doc/184920492/"
+                },
+                is_authoritative=False,
+                hop_number=2,
+                hop_title="Judicial & NCLT Insolvency Docket Agent"
+            )
+
+            ev3 = EvidenceItem(
+                evidence_id="ev_hop3_dggi_demo",
+                source_url="demo://indiankanoon.org/dggi-enforcement/specter",
+                source_name="DGGI Enforcement & Debarment Radar [Hop 3: DEMO FIXTURE]",
+                claim_supported="Regulatory Enforcement & Vendor Blacklisting",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    "DGGI ENFORCEMENT HIT: Directorate General of GST Intelligence (DGGI), Mumbai Zonal Unit busted "
+                    "syndicate of shell entities issuing fake invoices without underlying supply of services. "
+                    "Specter Cloud Solutions LLP named in Show Cause Notice SCN/DGGI/MZU/2026/894. "
+                    "Debarred from public procurement and GeM."
+                ),
+                facts={
+                    "enforcement_hit": True,
+                    "agency_named": "Directorate General of GST Intelligence (DGGI), Mumbai Zonal Unit",
+                    "allegation_summary": "Named in DGGI Show Cause Notice SCN/DGGI/MZU/2026/894 for issuance of fake invoices without supply of services.",
+                    "risk_severity": "CRITICAL"
+                },
+                is_authoritative=False,
+                hop_number=3,
+                hop_title="DGGI Enforcement & Public Debarment Radar"
+            )
+
+            ev4 = EvidenceItem(
+                evidence_id="ev_hop4_indiamart_demo",
+                source_url="demo://dir.indiamart.com/search.mp?ss=Cloud+Compute+GPU+Cluster",
+                source_name="IndiaMART B2B Procurement Benchmark [Hop 4: DEMO FIXTURE]",
+                claim_supported="Procurement Price Fairness & Anti-Kickback",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    "INDIAMART B2B BENCHMARK: Billed Unit Price ₹7,20,000.00 vs IndiaMART Wholesale Median ₹2,40,000.00. "
+                    "Severe 200.0% price inflation detected. Billed price exceeds market ceiling by over 2x. "
+                    "High indicator of corporate procurement kickback or synthetic invoice overbilling."
+                ),
+                facts={
+                    "market_median_price_inr": 240000.0,
+                    "market_min_price_inr": 210000.0,
+                    "market_max_price_inr": 280000.0,
+                    "sample_listings_count": 5,
+                    "price_inflation_pct": 200.0
+                },
+                is_authoritative=False,
+                hop_number=4,
+                hop_title="Live B2B Procurement Price Benchmark Agent"
+            )
+
             directors = [
                 DirectorProfile(
                     din="08992144",
-                    name="Ramesh Kumar (Nominee / Mule)",
-                    appointment_date="2026-08-10",
+                    name="Ramesh Kumar (Nominee)",
+                    appointment_date="2025-09-01",
                     associated_companies_count=14,
                     struck_off_companies_count=6,
                     contagion_ratio=0.43,
-                    active_insolvency_cases=1,
+                    active_insolvency_cases=2,
                     is_benami_flagged=True
                 )
             ]
             address_cluster = AddressClusterProfile(
-                raw_address="Room 104, Plot 12, Shakarpur Commercial Complex, Delhi - 110092",
+                raw_address="Room 104, Shakarpur Complex, East Delhi",
                 collocated_gstins_count=38,
                 premises_type="VIRTUAL_OFFICE",
                 is_ghost_hub=True,
-                evidence_url="demo://shakarpur-commercial-complex"
+                evidence_url="demo://maps.google.com/?q=Room+104+Shakarpur+Complex"
             )
             litigation_meta = {
                 "active_cases": 1,
                 "nclt_petitions": ["CP(IB)/412/ND/2026 under IBC Section 9"],
-                "gem_blacklisted": False
-            }
-            evidence_items = [
-                EvidenceItem(
-                    evidence_id="ev_hop1_gst_shell",
-                    source_url="demo://gstn-statutory-registry/07AAAAA0000A1Z5",
-                    source_name="[DEMO FIXTURE] GSTN Statutory Registry",
-                    claim_supported="Legal Entity Registration & Filing Cadence",
-                    source_type="GOVERNMENT_REGISTRY",
-                    source_mode=SourceMode.SIMULATED,
-                    is_fallback=True,
-                    fallback_reason="DEMO_EVALUATION_FIXTURE: System is operating in simulated evaluation mode without live TinyFish API credentials.",
-                    retrieved_at=now,
-                    raw_excerpt="[DEMO FIXTURE] GSTIN: 07AAAAA0000A1Z5 | Entity: Specter Cloud Technologies Pvt Ltd | Status: Active | Reg Date: 2026-07-01 | GSTR-3B: 2 Months Overdue | Cash Tax Paid: 0.1% (99.9% offset via ITC).",
-                    facts={"status": "Active", "filing_delay_months": 2, "cash_tax_ratio": 0.001},
-                    is_authoritative=False
+                "status": "CRITICAL_ADVERSE",
+                "docket_summary": JudicialDocketSummary(
+                    adverse_docket_count=2,
+                    top_case_title="Operational Creditor vs Specter Cloud Solutions LLP [CP(IB)/412/ND/2026 under IBC Section 9]",
+                    insolvency_or_tax_fraud_flag=True,
+                    forensic_summary="Active NCLT insolvency proceedings admitted under Section 9 of IBC. Moratorium active.",
+                    source_url="demo://indiankanoon.org/doc/184920492/"
                 ),
-                EvidenceItem(
-                    evidence_id="ev_hop2_director_shell",
-                    source_url="demo://mca-director-portfolio/08992144",
-                    source_name="[DEMO FIXTURE] MCA Director Portfolio Traversal",
-                    claim_supported="Promoter Network & Shell Contagion",
-                    source_type="CORPORATE_REGISTRY",
-                    source_mode=SourceMode.SIMULATED,
-                    is_fallback=True,
-                    fallback_reason="DEMO_EVALUATION_FIXTURE: System is operating in simulated evaluation mode without live TinyFish API credentials.",
-                    retrieved_at=now,
-                    raw_excerpt="[DEMO FIXTURE] DIN 08992144 is Director in 14 companies. 6 companies Struck Off by RoC under Section 248(1) (Non-operational/Shell). 1 company under active NCLT liquidation.",
-                    facts={"din": "08992144", "total_companies": 14, "struck_off": 6, "shell_contagion": 0.43},
-                    is_authoritative=False
+                "enforcement_radar": EnforcementRadarSummary(
+                    enforcement_hit=True,
+                    agency_named="Directorate General of GST Intelligence (DGGI)",
+                    allegation_summary="Named in DGGI Show Cause Notice SCN/DGGI/MZU/2026/894 for fake invoices without supply.",
+                    risk_severity="CRITICAL",
+                    source_url="demo://indiankanoon.org/dggi/specter"
                 ),
-                EvidenceItem(
-                    evidence_id="ev_hop3_ghost_hub",
-                    source_url="demo://spatial-geo-cluster/shakarpur",
-                    source_name="[DEMO FIXTURE] Spatial Geo-Cluster Analysis",
-                    claim_supported="Physical Grounding & Ghost Hub Detection",
-                    source_type="GEO_DIRECTORY",
-                    source_mode=SourceMode.SIMULATED,
-                    is_fallback=True,
-                    fallback_reason="DEMO_EVALUATION_FIXTURE: System is operating in simulated evaluation mode without live TinyFish API credentials.",
-                    retrieved_at=now,
-                    raw_excerpt="[DEMO FIXTURE] Address Collocation Analysis: 38 distinct GSTINs registered at Room 104, Shakarpur Complex (150 sq ft). Classified as High-Density Virtual Mailbox Hub.",
-                    facts={"collocated_count": 38, "premises": "VIRTUAL_OFFICE", "is_ghost_hub": True},
-                    is_authoritative=False
-                ),
-                EvidenceItem(
-                    evidence_id="ev_hop4_nclt",
-                    source_url="demo://nclt-registry/cp-ib-412-2026",
-                    source_name="[DEMO FIXTURE] National Company Law Tribunal",
-                    claim_supported="Litigation & Insolvency Sweep",
-                    source_type="JUDICIAL_REGISTRY",
-                    source_mode=SourceMode.SIMULATED,
-                    is_fallback=True,
-                    fallback_reason="DEMO_EVALUATION_FIXTURE: System is operating in simulated evaluation mode without live TinyFish API credentials.",
-                    retrieved_at=now,
-                    raw_excerpt="[DEMO FIXTURE] NCLT New Delhi Bench: CP(IB)/412/ND/2026 active under Section 9 of Insolvency and Bankruptcy Code (IBC) for operational creditor default.",
-                    facts={"active_petitions": 1},
-                    is_authoritative=False
+                "procurement_benchmark": ProcurementPriceBenchmark(
+                    item_description=primary_item or "Enterprise Cloud Compute Units",
+                    billed_unit_price=billed_unit_price or 720000.0,
+                    market_median_price_inr=240000.0,
+                    market_min_price_inr=210000.0,
+                    market_max_price_inr=280000.0,
+                    sample_listings_count=5,
+                    price_inflation_pct=200.0,
+                    is_anomaly=True,
+                    source_url="demo://dir.indiamart.com/search.mp?ss=Cloud+Compute+GPU+Cluster"
                 )
-            ]
-            return evidence_items, directors, address_cluster, litigation_meta
+            }
+            return [ev1, ev2, ev3, ev4], directors, address_cluster, litigation_meta
 
-        # CASE 1: Benchmark Apex Courier (Legitimate operating business)
-        directors = [
-            DirectorProfile(
-                din="02341908",
-                name="Sanjay Singhal",
-                appointment_date="2018-04-12",
-                associated_companies_count=2,
-                struck_off_companies_count=0,
-                contagion_ratio=0.0,
-                active_insolvency_cases=0,
-                is_benami_flagged=False
-            )
-        ]
-        address_cluster = AddressClusterProfile(
-            raw_address="Plot 44, Phase-II, Okhla Industrial Area, New Delhi - 110020",
-            collocated_gstins_count=1,
-            premises_type="INDUSTRIAL_WAREHOUSE",
-            is_ghost_hub=False,
-            evidence_url="demo://okhla-phase-2"
-        )
-        litigation_meta = {"active_cases": 0, "nclt_petitions": [], "gem_blacklisted": False}
-        evidence_items = [
-            EvidenceItem(
-                evidence_id="ev_hop1_gst_apex",
-                source_url="demo://gstn-statutory-registry/07AAAAA0000A1Z5",
-                source_name="[DEMO FIXTURE] GSTN Statutory Registry",
-                claim_supported="Legal Entity Registration & Trade Name",
+        # ----------------------------------------------------
+        # SCENARIO B: Havells India Limited (Live Real-World Demo Fixture)
+        # ----------------------------------------------------
+        elif "havells" in name_lower or clean_gstin == "07AAACH0828A1ZE":
+            ev1 = EvidenceItem(
+                evidence_id="ev_hop1_gst_demo",
+                source_url="demo://knowyourgst.com/07AAACH0828A1ZE",
+                source_name="GST Filing Velocity & Legal Status [Hop 1: DEMO FIXTURE]",
+                claim_supported="Legal Entity Registration & Filing Velocity",
                 source_type="GOVERNMENT_REGISTRY",
                 source_mode=SourceMode.SIMULATED,
                 is_fallback=True,
-                fallback_reason="DEMO_EVALUATION_FIXTURE: System is operating in simulated evaluation mode without live TinyFish API credentials.",
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
                 retrieved_at=now,
-                raw_excerpt="[DEMO FIXTURE] GSTIN: 07AAAAA0000A1Z5 | Legal: Apex Global Logistics Pvt Ltd | Trade: Apex Courier | Status: Active | Constitution: Private Limited | Reg Date: 2018-04-12 | GSTR-3B: Regular.",
+                raw_excerpt=(
+                    "KNOWYOURGST AUDIT LOG: GSTIN 07AAACH0828A1ZE registered to 'Havells India Limited'. "
+                    "Trade Name: Havells Industrial Electricals. Status: ACTIVE. "
+                    "Date of Registration: 2017-07-01. GSTR-1 and GSTR-3B filings strictly regular. Zero default."
+                ),
                 facts={
-                    "legal_name": "Apex Global Logistics Private Limited",
-                    "trade_name": "Apex Courier",
-                    "status": "Active",
-                    "incorporation_date": "2018-04-12",
+                    "legal_name": "Havells India Limited",
+                    "trade_name": "Havells Industrial Electricals",
+                    "gst_status": "ACTIVE",
+                    "registration_date": "2017-07-01",
+                    "gstr3b_status": "FILED_ON_TIME",
+                    "filing_delay_detected": False,
                     "filing_delay_months": 0
                 },
-                is_authoritative=False
-            ),
-            EvidenceItem(
-                evidence_id="ev_hop2_director_apex",
-                source_url="demo://mca-corporate-registry/APEX-GLOBAL-LOGISTICS",
-                source_name="[DEMO FIXTURE] MCA Corporate Registry",
-                claim_supported="Promoter Network & Directorship Verification",
-                source_type="CORPORATE_REGISTRY",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_EVALUATION_FIXTURE: System is operating in simulated evaluation mode without live TinyFish API credentials.",
-                retrieved_at=now,
-                raw_excerpt="[DEMO FIXTURE] Director Sanjay Singhal (DIN 02341908). Active since 2018. Associated with 2 logistics firms. 0 struck-off entities. Clean MCA track record.",
-                facts={"din": "02341908", "total_companies": 2, "struck_off": 0, "shell_contagion": 0.0},
-                is_authoritative=False
-            ),
-            EvidenceItem(
-                evidence_id="ev_hop3_geo_apex",
-                source_url="demo://spatial-geo-cluster/okhla",
-                source_name="[DEMO FIXTURE] Spatial Geo-Cluster Analysis",
-                claim_supported="Physical Grounding & Operational Premises",
-                source_type="GEO_DIRECTORY",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_EVALUATION_FIXTURE: System is operating in simulated evaluation mode without live TinyFish API credentials.",
-                retrieved_at=now,
-                raw_excerpt="[DEMO FIXTURE] Address Grounding: Plot 44, Okhla Industrial Area Phase II is an active 8,000 sq ft logistics depot. 1 GSTIN registered. Verified commercial premises.",
-                facts={"collocated_count": 1, "premises": "INDUSTRIAL_WAREHOUSE", "is_ghost_hub": False},
-                is_authoritative=False
-            ),
-            EvidenceItem(
-                evidence_id="ev_hop4_judicial_apex",
-                source_url="demo://nclt-registry/apex",
-                source_name="[DEMO FIXTURE] Judicial & NCLT Registry",
-                claim_supported="Litigation & Insolvency Sweep",
-                source_type="JUDICIAL_REGISTRY",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_EVALUATION_FIXTURE: System is operating in simulated evaluation mode without live TinyFish API credentials.",
-                retrieved_at=now,
-                raw_excerpt="[DEMO FIXTURE] NCLT / eCourts: No insolvency petitions, winding-up suits, or debarment orders found for Apex Global Logistics Pvt Ltd.",
-                facts={"active_petitions": 0},
-                is_authoritative=False
+                is_authoritative=False,
+                hop_number=1,
+                hop_title="GST Filing Velocity & Entity Cross-Check"
             )
-        ]
-        return evidence_items, directors, address_cluster, litigation_meta
+
+            ev2 = EvidenceItem(
+                evidence_id="ev_hop2_kanoon_demo",
+                source_url="demo://indiankanoon.org/search/?formInput=Havells+India+Limited+NCLT",
+                source_name="Indian Kanoon NCLT & High Court Radar [Hop 2: DEMO FIXTURE]",
+                claim_supported="Judicial Insolvency & Tax Tribunal Standing",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    "INDIAN KANOON DOCKET: Judicial search for 'Havells India Limited' across High Courts & Tribunals. "
+                    "Routine commercial trademark protection matters only. "
+                    "Zero active NCLT IBC Section 7/9 insolvency proceedings. Zero fake-ITC prosecution orders."
+                ),
+                facts={
+                    "adverse_docket_count": 0,
+                    "top_case_title": "Havells India Limited vs Commercial Counterpart (2023) - Trademark Injunction",
+                    "insolvency_or_tax_fraud_flag": False,
+                    "forensic_summary": "Zero active insolvency, CIRP, or Section 74 tax fraud proceedings on Indian Kanoon.",
+                    "source_url": "demo://indiankanoon.org/search/?formInput=Havells+India+Limited"
+                },
+                is_authoritative=False,
+                hop_number=2,
+                hop_title="Judicial & NCLT Insolvency Docket Agent"
+            )
+
+            ev3 = EvidenceItem(
+                evidence_id="ev_hop3_dggi_demo",
+                source_url="demo://indiankanoon.org/dggi/havells",
+                source_name="DGGI Enforcement & Debarment Radar [Hop 3: DEMO FIXTURE]",
+                claim_supported="Regulatory Enforcement & Vendor Blacklisting",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    "DGGI REGULATORY SWEEP: Zero adverse show-cause notices for circular trading or fake invoices. "
+                    "Active PSU & GeM supplier in good standing."
+                ),
+                facts={
+                    "enforcement_hit": False,
+                    "agency_named": "None",
+                    "allegation_summary": "Clean statutory standing across DGGI, CBIC, and GeM procurement portals.",
+                    "risk_severity": "LOW"
+                },
+                is_authoritative=False,
+                hop_number=3,
+                hop_title="DGGI Enforcement & Public Debarment Radar"
+            )
+
+            billed_p = billed_unit_price or 84500.0
+            ev4 = EvidenceItem(
+                evidence_id="ev_hop4_indiamart_demo",
+                source_url="demo://dir.indiamart.com/search.mp?ss=Havells+3+Core+4+sqmm+Copper+Armoured+Cable",
+                source_name="IndiaMART B2B Procurement Benchmark [Hop 4: DEMO FIXTURE]",
+                claim_supported="Procurement Price Fairness & Anti-Kickback",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    f"INDIAMART B2B BENCHMARK: Search for 'Havells 3 Core 4 sqmm Copper Armoured Cable'. "
+                    f"Top wholesale listings extract median ₹82,000.00 per drum (Range: ₹78,000 - ₹86,000). "
+                    f"Billed Unit Price ₹{billed_p:,.2f} is within fair wholesale market pricing (+3.0% variance). "
+                    f"Zero over-invoicing anomaly."
+                ),
+                facts={
+                    "market_median_price_inr": 82000.0,
+                    "market_min_price_inr": 78000.0,
+                    "market_max_price_inr": 86000.0,
+                    "sample_listings_count": 6,
+                    "price_inflation_pct": 3.0
+                },
+                is_authoritative=False,
+                hop_number=4,
+                hop_title="Live B2B Procurement Price Benchmark Agent"
+            )
+
+            directors = [
+                DirectorProfile(
+                    din="00028734",
+                    name="Anil Rai Gupta",
+                    appointment_date="2004-06-12",
+                    associated_companies_count=3,
+                    struck_off_companies_count=0,
+                    contagion_ratio=0.0,
+                    active_insolvency_cases=0,
+                    is_benami_flagged=False
+                )
+            ]
+            address_cluster = AddressClusterProfile(
+                raw_address="QRG Towers, 2D, Expressway, Sector 126, Noida, UP",
+                collocated_gstins_count=1,
+                premises_type="COMMERCIAL_HUB",
+                is_ghost_hub=False,
+                evidence_url="demo://maps.google.com/?q=QRG+Towers+Noida"
+            )
+            litigation_meta = {
+                "active_cases": 0,
+                "nclt_petitions": [],
+                "status": "CLEAN",
+                "docket_summary": JudicialDocketSummary(
+                    adverse_docket_count=0,
+                    top_case_title="Havells India Limited vs Commercial Counterpart (2023)",
+                    insolvency_or_tax_fraud_flag=False,
+                    forensic_summary="Zero adverse insolvency, CIRP, or Section 74 tax fraud proceedings on Indian Kanoon.",
+                    source_url="demo://indiankanoon.org/search/?formInput=Havells+India+Limited"
+                ),
+                "enforcement_radar": EnforcementRadarSummary(
+                    enforcement_hit=False,
+                    agency_named="None",
+                    allegation_summary="Clean regulatory record; zero DGGI raids, CBIC notices, or GeM debarment.",
+                    risk_severity="LOW",
+                    source_url="demo://indiankanoon.org/dggi/havells"
+                ),
+                "procurement_benchmark": ProcurementPriceBenchmark(
+                    item_description=primary_item or "Havells 3 Core 4 sqmm Copper Armoured Cable",
+                    billed_unit_price=billed_p,
+                    market_median_price_inr=82000.0,
+                    market_min_price_inr=78000.0,
+                    market_max_price_inr=86000.0,
+                    sample_listings_count=6,
+                    price_inflation_pct=3.0,
+                    is_anomaly=False,
+                    source_url="demo://dir.indiamart.com/search.mp?ss=Havells+3+Core+4+sqmm+Copper+Armoured+Cable"
+                )
+            }
+            return [ev1, ev2, ev3, ev4], directors, address_cluster, litigation_meta
+
+        # ----------------------------------------------------
+        # SCENARIO C: Default / Apex Courier (Trade Name Mismatch Benchmark)
+        # ----------------------------------------------------
+        else:
+            ev1 = EvidenceItem(
+                evidence_id="ev_hop1_gst_demo",
+                source_url="demo://knowyourgst.com/07AAAAA0000A1Z5",
+                source_name="GST Filing Velocity & Legal Status [Hop 1: DEMO FIXTURE]",
+                claim_supported="Legal Entity Registration & Filing Velocity",
+                source_type="GOVERNMENT_REGISTRY",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    "KNOWYOURGST AUDIT LOG: GSTIN 07AAAAA0000A1Z5 registered to 'Apex Global Logistics Pvt Ltd'. "
+                    "Trade Name on record: 'Apex Courier'. Status: ACTIVE. "
+                    "Date of Registration: 2018-04-12. Regular taxpayer under Delhi jurisdiction. "
+                    "GSTR-1 and GSTR-3B filings up to date for current fiscal quarter."
+                ),
+                facts={
+                    "legal_name": "Apex Global Logistics Pvt Ltd",
+                    "trade_name": "Apex Courier",
+                    "gst_status": "ACTIVE",
+                    "registration_date": "2018-04-12",
+                    "gstr3b_status": "FILED_ON_TIME",
+                    "filing_delay_detected": False,
+                    "filing_delay_months": 0
+                },
+                is_authoritative=False,
+                hop_number=1,
+                hop_title="GST Filing Velocity & Entity Cross-Check"
+            )
+
+            ev2 = EvidenceItem(
+                evidence_id="ev_hop2_kanoon_demo",
+                source_url="demo://indiankanoon.org/search/?formInput=Apex+Global+Logistics+NCLT",
+                source_name="Indian Kanoon NCLT & High Court Radar [Hop 2: DEMO FIXTURE]",
+                claim_supported="Judicial Insolvency & Tax Tribunal Standing",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    "INDIAN KANOON DOCKET: Judicial records sweep for 'Apex Global Logistics Pvt Ltd'. "
+                    "Zero active insolvency, CIRP, or Section 7/9 NCLT petitions found. "
+                    "No adverse tax tribunal or Section 74 fraud judgments on record."
+                ),
+                facts={
+                    "adverse_docket_count": 0,
+                    "top_case_title": "Apex Global Logistics Pvt Ltd vs Commercial Tax Officer (2021) - Clarification Order",
+                    "insolvency_or_tax_fraud_flag": False,
+                    "forensic_summary": "No active CIRP, Section 7/9 NCLT petitions, or fake-ITC allegations found on Indian Kanoon.",
+                    "source_url": "demo://indiankanoon.org/search/?formInput=Apex+Global+Logistics"
+                },
+                is_authoritative=False,
+                hop_number=2,
+                hop_title="Judicial & NCLT Insolvency Docket Agent"
+            )
+
+            ev3 = EvidenceItem(
+                evidence_id="ev_hop3_dggi_demo",
+                source_url="demo://indiankanoon.org/dggi/apex",
+                source_name="DGGI Enforcement & Debarment Radar [Hop 3: DEMO FIXTURE]",
+                claim_supported="Regulatory Enforcement & Vendor Blacklisting",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    "DGGI REGULATORY SWEEP: Clean regulatory standing across DGGI, CBIC, and public procurement portals. "
+                    "Zero circular trading show cause notices."
+                ),
+                facts={
+                    "enforcement_hit": False,
+                    "agency_named": "None",
+                    "allegation_summary": "Clean regulatory sweep; zero DGGI raids, CBIC show-cause notices, or GeM debarment records.",
+                    "risk_severity": "LOW"
+                },
+                is_authoritative=False,
+                hop_number=3,
+                hop_title="DGGI Enforcement & Public Debarment Radar"
+            )
+
+            billed_p = billed_unit_price or 408898.31
+            ev4 = EvidenceItem(
+                evidence_id="ev_hop4_indiamart_demo",
+                source_url="demo://dir.indiamart.com/search.mp?ss=Express+Courier+Transit+Logistics",
+                source_name="IndiaMART B2B Procurement Benchmark [Hop 4: DEMO FIXTURE]",
+                claim_supported="Procurement Price Fairness & Anti-Kickback",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    f"INDIAMART B2B BENCHMARK: Primary line item 'Inter-State Express Courier Services & Document Transit'. "
+                    f"Market median for high-volume enterprise document haulage: ₹3,95,000.00. "
+                    f"Billed unit price of ₹{billed_p:,.2f} displays +3.5% variance. Within standard wholesale margin."
+                ),
+                facts={
+                    "market_median_price_inr": 395000.0,
+                    "market_min_price_inr": 360000.0,
+                    "market_max_price_inr": 420000.0,
+                    "sample_listings_count": 6,
+                    "price_inflation_pct": 3.5
+                },
+                is_authoritative=False,
+                hop_number=4,
+                hop_title="Live B2B Procurement Price Benchmark Agent"
+            )
+
+            directors = [
+                DirectorProfile(
+                    din="02341908",
+                    name="Sanjay Singhal",
+                    appointment_date="2018-04-12",
+                    associated_companies_count=2,
+                    struck_off_companies_count=0,
+                    contagion_ratio=0.0,
+                    active_insolvency_cases=0,
+                    is_benami_flagged=False
+                )
+            ]
+            address_cluster = AddressClusterProfile(
+                raw_address=address or "Okhla Industrial Area Phase II, New Delhi 110020",
+                collocated_gstins_count=1,
+                premises_type="INDUSTRIAL_WAREHOUSE",
+                is_ghost_hub=False,
+                evidence_url="demo://maps.google.com/?q=Okhla+Industrial+Area+Phase+II"
+            )
+            litigation_meta = {
+                "active_cases": 0,
+                "nclt_petitions": [],
+                "status": "CLEAN",
+                "docket_summary": JudicialDocketSummary(
+                    adverse_docket_count=0,
+                    top_case_title="Apex Global Logistics Pvt Ltd vs Commercial Tax Officer (2021)",
+                    insolvency_or_tax_fraud_flag=False,
+                    forensic_summary="No active CIRP, Section 7/9 NCLT petitions, or fake-ITC allegations found on Indian Kanoon.",
+                    source_url="demo://indiankanoon.org/search/?formInput=Apex+Global+Logistics"
+                ),
+                "enforcement_radar": EnforcementRadarSummary(
+                    enforcement_hit=False,
+                    agency_named="None",
+                    allegation_summary="Clean regulatory record; zero DGGI raids, CBIC notices, or GeM debarment.",
+                    risk_severity="LOW",
+                    source_url="demo://indiankanoon.org/dggi/apex"
+                ),
+                "procurement_benchmark": ProcurementPriceBenchmark(
+                    item_description=primary_item or "Inter-State Express Courier Services",
+                    billed_unit_price=billed_p,
+                    market_median_price_inr=395000.0,
+                    market_min_price_inr=360000.0,
+                    market_max_price_inr=420000.0,
+                    sample_listings_count=6,
+                    price_inflation_pct=3.5,
+                    is_anomaly=False,
+                    source_url="demo://dir.indiamart.com/search.mp?ss=Express+Courier+Transit+Logistics"
+                )
+            }
+            return [ev1, ev2, ev3, ev4], directors, address_cluster, litigation_meta

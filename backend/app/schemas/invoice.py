@@ -39,8 +39,23 @@ class InvoiceClaim(BaseModel):
     total_amount: float = 0.0
     tax_breakdown: List[TaxBreakdownItem] = Field(default_factory=list)
     bank_account_masked: Optional[str] = None  # Always masked (e.g. XXXX-XXXX-1234)
+    bank_account_hash: Optional[str] = None    # SHA-256 for mutation comparison
+    bank_beneficiary_name: Optional[str] = None
+    bank_mutation_detected: bool = False
+    beneficiary_name_match_score: Optional[float] = 1.0
     ifsc_code: Optional[str] = None
     line_items: List[LineItem] = Field(default_factory=list)
+
+    # Physical Supply & e-Way Bill / IRN (CGST Sec 16(2)(b))
+    irn_hash: Optional[str] = None
+    eway_bill_no: Optional[str] = None
+    vehicle_no: Optional[str] = None
+    eway_bill_required: bool = False
+    eway_bill_missing: bool = False
+
+    # Procurement Price Benchmark
+    market_benchmark_unit_price: Optional[float] = None
+    price_inflation_pct: Optional[float] = None
     
     # Validation state
     gstin_format_valid: Optional[bool] = None

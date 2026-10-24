@@ -101,13 +101,44 @@ Route (app)                                 Size  First Load JS
 └ ○ /upload                               4.5 kB         111 kB
 ```
 
+### Phase C (P0): Real Checks & Pluggable Providers (Completed)
+* **Key Enhancements Implemented:**
+  - **C1: Deterministic Real Checks:**
+    - `BUYER_GSTIN_MISMATCH` & `BUYER_GSTIN_MISSING`: Verified against configured `BUYER_GSTINS` list. Prevents invalid claims in third-party entity names.
+    - `TAX_TYPE_STATE_MISMATCH`: Verifies supplier state code (GSTIN chars 1-2) against buyer state code / place of supply. Flags intra-state IGST or inter-state CGST/SGST.
+    - `PAN_FORMAT_INVALID`: Checks 4th character of embedded PAN against valid legal entity holder types (`CPHFATBLJG`).
+    - `INVOICE_NUMBER_FORMAT_INVALID`: Validates invoice number length (<= 16) and character restrictions under GST Rule 46.
+    - `FUTURE_INVOICE_DATE`: Rejects future invoice dates.
+    - `ITC_TIME_BAR_WARNING`: Flags invoices beyond Section 16(4) cutoff (30 Nov following FY end) for CA review.
+    - `EINVOICE_QR_MISMATCH`: Hard gate (BLOCK) if cryptographically verified QR code contradicts printed totals.
+    - `LINE_ITEM_ARITHMETIC_MISMATCH`: Compares line item sums with taxable and gross totals.
+  - **C2: Pluggable Registry Providers (`backend/app/services/providers/`):**
+    - `ManualEntryProvider`: Reviewer submits public portal taxpayer details (`POST /api/cases/{id}/evidence/gstin`). Stored as authoritative evidence (`source_mode=MANUAL`).
+    - `HttpKycProvider`: Configurable HTTP endpoint via `GSTIN_API_URL_TEMPLATE`, auth headers, and `GSTIN_API_FIELD_MAP`.
+    - `TinyFishProvider`: Web research agent automation for public portal lookup.
+    - `DemoProvider`: Isolated synthetic fixtures for demo mode only.
+    - `CompositeRegistryProvider`: Sequences through `GSTIN_PROVIDERS` and fails closed to `UNAVAILABLE`.
+  - **C3: IFSC Verification (`ifsc_provider.py`):**
+    - Open RBI dataset via `https://ifsc.razorpay.com/<IFSC>`.
+    - 30-day SQLite caching (`ifsc_cache` table) with TTL expiration.
+    - Strict truth invariant: never claims account ownership; flags `BANK_OWNERSHIP_UNVERIFIED`.
+  - **C4: Verdict Semantics & Explanation (`AssessmentService`):**
+    - Single source of truth: PASS requires valid GSTIN, verified arithmetic, valid tax state alignment, active GST status, and no conflicts.
+    - Added `GET /api/cases/{id}/explain` returning plain-English `why_this_verdict` and `what_would_change_it` action items.
+
+* **Backend Pytest Output (Phase C):**
+```
+collected 105 items
+====================== 105 passed, 2 warnings in 11.30s =======================
+```
+
 ---
 
 ## 2. Phase Implementation Checklist
 
 - [x] **Phase A (P0): Fix Verified Defects**
 - [x] **Phase B (P0): Layered Extraction Pipeline (QR + Text + LLM with Provenance)**
-- [ ] **Phase C (P0): Real Checks, Pluggable Providers (Manual, HttpKyc, TinyFish), IFSC & Verdict Semantics**
+- [x] **Phase C (P0): Real Checks, Pluggable Providers (Manual, HttpKyc, TinyFish), IFSC & Verdict Semantics**
 - [ ] **Phase D (P0): Minimal Real Auth (Bearer Tokens, Roles, Server-Derived Identity, Audit Verify)**
 - [ ] **Phase E (P0): Frontend for Real Flow (Review Step, Provenance Chips, Manual Evidence Form, Honest Claims)**
 - [ ] **Phase F (P1): GSTR-2B Reconciliation & Invoice Matching**

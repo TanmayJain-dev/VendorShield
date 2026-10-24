@@ -1,10 +1,14 @@
+import re
 import uuid
 from typing import List, Tuple, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from ...schemas.invoice import InvoiceClaim
 from ...schemas.evidence import FieldCheckResult
 from ...schemas.assessment import RiskAssessment, RuleTrigger
 from ...schemas.enums import RecommendationOutcome, CheckStatus, SourceMode, ExtractionStatus
+from ...config import settings
+
+VALID_PAN_HOLDERS = set("CPHFATBLJG")
 
 class DeterministicRuleEngine:
     """
@@ -12,10 +16,10 @@ class DeterministicRuleEngine:
     - Transparent, deterministic deductions based on explicit rules.
     - Explicitly NOT presented as a calibrated statistical fraud probability.
     - Granular rule trigger objects with severities, reason codes, weights, and evidence links.
-    - Robust evidence completeness calculation distinguishing live, simulated, missing, and conflicting evidence.
+    - Single source of truth for PASS / MANUAL_REVIEW / BLOCK verdicts.
     """
-    def __init__(self, version: str = "1.0.0"):
-        self.version = version
+    def __init__(self, version: Optional[str] = None):
+        self.version = version or settings.RULES_VERSION
 
     def evaluate(
         self,
@@ -31,8 +35,22 @@ class DeterministicRuleEngine:
         # Base policy compliance index (100 = full policy compliance)
         score = 100
 
-        # --- Rule 1: GSTIN Format Checksum ---
-        if invoice.gstin_format_valid is False:
+        # --- Rule 1: GSTIN Presence & Format Checksum ---
+        if not invoice.gstin:
+            rule = RuleTrigger(
+                rule_id="RULE_GSTIN_MISSING",
+                rule_name="Supplier GSTIN Missing",
+                severity="HIGH",
+                weight=30,
+                is_hard_gate=False,
+                reason_code="GSTIN_MISSING",
+                description="Supplier GSTIN is missing from invoice. Fail-closed policy requires manual invoice inspection."
+            )
+            triggered_rules.append(rule)
+            reason_codes.append("GSTIN_MISSING")
+            missing_evidence_items.append("Supplier GSTIN")
+            score -= 30
+        elif invoice.gstin_format_valid is False:
             rule = RuleTrigger(
                 rule_id="RULE_GSTIN_FORMAT_INVALID",
                 rule_name="GSTIN Format or Checksum Failure",
@@ -47,7 +65,24 @@ class DeterministicRuleEngine:
             reason_codes.append("GSTIN_FORMAT_INVALID")
             score -= 30
 
-        # --- Rule 2: Invoice Mathematical Consistency ---
+        # --- Rule 2: PAN Consistency & Entity Structure ---
+        if invoice.gstin and len(invoice.gstin) >= 12:
+            pan = invoice.gstin[2:12].upper()
+            if len(pan) >= 4 and pan[3] not in VALID_PAN_HOLDERS:
+                rule = RuleTrigger(
+                    rule_id="RULE_PAN_FORMAT_INVALID",
+                    rule_name="Invalid Embedded PAN Holder Type",
+                    severity="HIGH",
+                    weight=20,
+                    is_hard_gate=False,
+                    reason_code="PAN_FORMAT_INVALID",
+                    description=f"4th character '{pan[3]}' of GSTIN PAN ({pan}) is not a valid taxpayer entity code (expected C, P, H, F, A, T, B, L, J, or G)."
+                )
+                triggered_rules.append(rule)
+                reason_codes.append("PAN_FORMAT_INVALID")
+                score -= 20
+
+        # --- Rule 3: Invoice Mathematical Consistency ---
         if invoice.arithmetic_valid is False:
             rule = RuleTrigger(
                 rule_id="RULE_ARITHMETIC_MISMATCH",
@@ -62,7 +97,186 @@ class DeterministicRuleEngine:
             reason_codes.append("INVOICE_ARITHMETIC_MISMATCH")
             score -= 20
 
-        # --- Rule 3: Tax Breakdown Uncertainty / Inferred ---
+        # --- Rule 4: Buyer GSTIN Matching ---
+        configured_buyers = [str(b).strip().upper() for b in (settings.BUYER_GSTINS or []) if str(b).strip()]
+        if configured_buyers:
+            if not invoice.buyer_gstin:
+                rule = RuleTrigger(
+                    rule_id="RULE_BUYER_GSTIN_MISSING",
+                    rule_name="Missing Buyer GSTIN",
+                    severity="HIGH",
+                    weight=20,
+                    is_hard_gate=False,
+                    reason_code="BUYER_GSTIN_MISSING",
+                    description="Buyer GSTIN is missing from invoice. Input Tax Credit cannot be claimed in an unverified entity's name."
+                )
+                triggered_rules.append(rule)
+                reason_codes.append("BUYER_GSTIN_MISSING")
+                missing_evidence_items.append("Billed Organization GSTIN")
+                score -= 20
+            elif invoice.buyer_gstin.strip().upper() not in configured_buyers:
+                rule = RuleTrigger(
+                    rule_id="RULE_BUYER_GSTIN_MISMATCH",
+                    rule_name="Buyer GSTIN Mismatch",
+                    severity="HIGH",
+                    weight=25,
+                    is_hard_gate=False,
+                    reason_code="BUYER_GSTIN_MISMATCH",
+                    description=f"Extracted Buyer GSTIN ({invoice.buyer_gstin}) does not match any registered company GSTIN."
+                )
+                triggered_rules.append(rule)
+                reason_codes.append("BUYER_GSTIN_MISMATCH")
+                score -= 25
+
+        # --- Rule 5: Tax Type vs State Consistency ---
+        if invoice.gstin and len(invoice.gstin) >= 2:
+            sup_state = invoice.gstin[:2]
+            buy_state = None
+            if invoice.buyer_gstin and len(invoice.buyer_gstin) >= 2:
+                buy_state = invoice.buyer_gstin[:2]
+            elif invoice.place_of_supply and len(invoice.place_of_supply.strip()) == 2 and invoice.place_of_supply.strip().isdigit():
+                buy_state = invoice.place_of_supply.strip()
+
+            if sup_state and buy_state:
+                if sup_state == buy_state:
+                    # Intra-state: CGST + SGST expected
+                    if invoice.igst > 1.0 and (invoice.cgst <= 0.0 or invoice.sgst <= 0.0):
+                        rule = RuleTrigger(
+                            rule_id="RULE_TAX_TYPE_STATE_MISMATCH",
+                            rule_name="Tax Type vs State Mismatch",
+                            severity="HIGH",
+                            weight=20,
+                            is_hard_gate=False,
+                            reason_code="TAX_TYPE_STATE_MISMATCH",
+                            description=f"Intra-state supply (State code {sup_state}) erroneously charged IGST instead of CGST + SGST."
+                        )
+                        triggered_rules.append(rule)
+                        reason_codes.append("TAX_TYPE_STATE_MISMATCH")
+                        score -= 20
+                else:
+                    # Inter-state: IGST expected
+                    if (invoice.cgst > 1.0 or invoice.sgst > 1.0) and invoice.igst <= 0.0:
+                        rule = RuleTrigger(
+                            rule_id="RULE_TAX_TYPE_STATE_MISMATCH",
+                            rule_name="Tax Type vs State Mismatch",
+                            severity="HIGH",
+                            weight=20,
+                            is_hard_gate=False,
+                            reason_code="TAX_TYPE_STATE_MISMATCH",
+                            description=f"Inter-state supply (Supplier State {sup_state} -> Buyer State {buy_state}) charged CGST/SGST instead of IGST."
+                        )
+                        triggered_rules.append(rule)
+                        reason_codes.append("TAX_TYPE_STATE_MISMATCH")
+                        score -= 20
+
+        # --- Rule 6: Invoice Number Format (Rule 46) ---
+        if invoice.invoice_number and invoice.invoice_number != "UNKNOWN-INV":
+            inv_str = invoice.invoice_number.strip()
+            if len(inv_str) > 16 or re.search(r"[^A-Za-z0-9\-_/]", inv_str):
+                rule = RuleTrigger(
+                    rule_id="RULE_INVOICE_NUMBER_FORMAT_INVALID",
+                    rule_name="Invoice Number Format Violation (Rule 46)",
+                    severity="LOW",
+                    weight=10,
+                    is_hard_gate=False,
+                    reason_code="INVOICE_NUMBER_FORMAT_INVALID",
+                    description=f"Invoice number '{inv_str}' exceeds 16 characters or contains prohibited symbols under GST Rule 46."
+                )
+                triggered_rules.append(rule)
+                reason_codes.append("INVOICE_NUMBER_FORMAT_INVALID")
+                score -= 10
+
+        # --- Rule 7: Date Sanity & Section 16(4) ITC Time Bar ---
+        if invoice.invoice_date:
+            try:
+                inv_dt = datetime.strptime(invoice.invoice_date[:10], "%Y-%m-%d").date()
+                today = date.today()
+                if inv_dt > today:
+                    rule = RuleTrigger(
+                        rule_id="RULE_FUTURE_INVOICE_DATE",
+                        rule_name="Future-Dated Invoice",
+                        severity="HIGH",
+                        weight=30,
+                        is_hard_gate=False,
+                        reason_code="FUTURE_INVOICE_DATE",
+                        description=f"Invoice date ({invoice.invoice_date}) is in the future."
+                    )
+                    triggered_rules.append(rule)
+                    reason_codes.append("FUTURE_INVOICE_DATE")
+                    score -= 30
+                else:
+                    # FY runs Apr 1 to Mar 31. Cutoff is Nov 30 following FY end.
+                    fy_end_year = inv_dt.year if inv_dt.month <= 3 else inv_dt.year + 1
+                    itc_cutoff = date(fy_end_year, 11, 30)
+                    if today > itc_cutoff:
+                        rule = RuleTrigger(
+                            rule_id="RULE_ITC_TIME_BAR_WARNING",
+                            rule_name="ITC Section 16(4) Statutory Deadline Elapsed",
+                            severity="LOW",
+                            weight=10,
+                            is_hard_gate=False,
+                            reason_code="ITC_TIME_BAR_WARNING",
+                            description=f"Invoice date ({invoice.invoice_date}) exceeds Section 16(4) cut-off ({itc_cutoff}). Verify with Chartered Accountant."
+                        )
+                        triggered_rules.append(rule)
+                        reason_codes.append("ITC_TIME_BAR_WARNING")
+                        score -= 10
+            except Exception:
+                pass
+
+        # --- Rule 8: Extraction Conflicts & QR Discrepancy ---
+        if invoice.extraction_conflicts:
+            has_qr_conflict = any(
+                c.get("source_a") == "QR" or c.get("source_b") == "QR" 
+                for c in invoice.extraction_conflicts
+            )
+            if has_qr_conflict and getattr(invoice, "qr_signature_status", None) == "VERIFIED":
+                rule = RuleTrigger(
+                    rule_id="RULE_EINVOICE_QR_MISMATCH",
+                    rule_name="Cryptographically Verified QR Mismatch",
+                    severity="CRITICAL",
+                    weight=50,
+                    is_hard_gate=True,
+                    reason_code="EINVOICE_QR_MISMATCH",
+                    description="Tampering Warning: Verified-signature E-Invoice QR code payload contradicts printed invoice values."
+                )
+                triggered_rules.append(rule)
+                hard_gates_triggered.append("EINVOICE_QR_MISMATCH")
+                reason_codes.append("EINVOICE_QR_MISMATCH")
+                score -= 50
+            else:
+                rule = RuleTrigger(
+                    rule_id="RULE_EXTRACTION_CONFLICT",
+                    rule_name="Layered Extraction Discrepancy",
+                    severity="HIGH",
+                    weight=25,
+                    is_hard_gate=False,
+                    reason_code="EXTRACTION_CONFLICT",
+                    description="Invoice contains conflicting field extractions across QR, printed text, or OCR layers."
+                )
+                triggered_rules.append(rule)
+                reason_codes.append("EXTRACTION_CONFLICT")
+                score -= 25
+
+        # --- Rule 9: Line Item Sum Consistency ---
+        if invoice.line_items and len(invoice.line_items) > 1:
+            line_sum = sum(li.total for li in invoice.line_items)
+            ref_amt = invoice.taxable_amount if invoice.taxable_amount > 0 else invoice.total_amount
+            if ref_amt > 0 and abs(line_sum - ref_amt) > 2.0 and abs(line_sum - invoice.total_amount) > 2.0:
+                rule = RuleTrigger(
+                    rule_id="RULE_LINE_ITEM_ARITHMETIC_MISMATCH",
+                    rule_name="Line Item Aggregation Discrepancy",
+                    severity="HIGH",
+                    weight=20,
+                    is_hard_gate=False,
+                    reason_code="LINE_ITEM_ARITHMETIC_MISMATCH",
+                    description=f"Sum of extracted line items (INR {line_sum:.2f}) does not match invoice total (INR {ref_amt:.2f})."
+                )
+                triggered_rules.append(rule)
+                reason_codes.append("LINE_ITEM_ARITHMETIC_MISMATCH")
+                score -= 20
+
+        # --- Rule 10: Tax Breakdown Uncertainty / Inferred ---
         def _check_inferred(v):
             if hasattr(v, "status"):
                 return v.status == ExtractionStatus.INFERRED
@@ -84,7 +298,7 @@ class DeterministicRuleEngine:
             reason_codes.append("TAX_BREAKDOWN_INFERRED")
             score -= 15
 
-        # --- Rule 4: Zero-Tax / Missing Tax Specification ---
+        # --- Rule 11: Zero-Tax / Missing Tax Specification ---
         total_tax = round(invoice.cgst + invoice.sgst + invoice.igst, 2)
         if invoice.total_amount > 0 and total_tax == 0.0:
             rule = RuleTrigger(
@@ -101,7 +315,7 @@ class DeterministicRuleEngine:
             missing_evidence_items.append("Tax Exemption Certificate / LUT / Export Proof")
             score -= 15
 
-        # --- Rule 5: Extraction Errors / Parsing Failures ---
+        # --- Rule 12: Extraction Errors / Parsing Failures ---
         if invoice.parsing_errors:
             rule = RuleTrigger(
                 rule_id="RULE_PARSING_EXTRACTION_FAILURE",
@@ -117,6 +331,9 @@ class DeterministicRuleEngine:
             score -= 30
 
         # --- Evaluate Field-Level Checks from Evidence Reconciliation ---
+        gst_status_active_verified = False
+        has_critical_name_mismatch = False
+
         for check in field_checks:
             if check.reason_code and check.reason_code not in reason_codes:
                 reason_codes.append(check.reason_code)
@@ -137,6 +354,7 @@ class DeterministicRuleEngine:
                 score -= 50
 
             elif check.reason_code == "CRITICAL_NAME_MISMATCH":
+                has_critical_name_mismatch = True
                 rule = RuleTrigger(
                     rule_id="RULE_CRITICAL_NAME_MISMATCH",
                     rule_name="Critical Supplier Name Mismatch",
@@ -179,6 +397,19 @@ class DeterministicRuleEngine:
                 triggered_rules.append(rule)
                 score -= 12
                 missing_evidence_items.append("Beneficiary Bank Account Proof (Cancelled Cheque / Penny Drop)")
+
+            elif check.reason_code == "IFSC_INVALID":
+                rule = RuleTrigger(
+                    rule_id="RULE_IFSC_INVALID",
+                    rule_name="Invalid Bank IFSC Code",
+                    severity="MEDIUM",
+                    weight=20,
+                    is_hard_gate=False,
+                    reason_code="IFSC_INVALID",
+                    description=check.explanation
+                )
+                triggered_rules.append(rule)
+                score -= 20
 
             elif check.reason_code == "EVIDENCE_INSUFFICIENT":
                 rule = RuleTrigger(
@@ -237,21 +468,37 @@ class DeterministicRuleEngine:
                 triggered_rules.append(rule)
                 score -= 20
 
+            # Track verified active GST status
+            if check.field_name == "gst_status" and check.status == CheckStatus.MATCH:
+                gst_status_active_verified = True
+
         # Normalize score bounds
         score = max(0, min(100, score))
 
-        # --- Recommendation Policy Routing (Fail-Closed) ---
-        # Duplicates require manual human review; only confirmed inactive GST or critical legal name mismatch block directly
-        critical_block_gates = {"GST_STATUS_INACTIVE_CONFIRMED", "CRITICAL_NAME_MISMATCH"}
-        if any(gate in critical_block_gates for gate in hard_gates_triggered):
+        # --- Recommendation Policy Routing (Fail-Closed Verdict Semantics) ---
+        # 1. BLOCK: Only confirmed bad facts
+        critical_block_gates = {
+            "GST_STATUS_INACTIVE_CONFIRMED",
+            "CRITICAL_NAME_MISMATCH",
+            "EINVOICE_QR_MISMATCH",
+            "GSTIN_FORMAT_INVALID"
+        }
+        
+        has_block_gate = any(gate in critical_block_gates for gate in hard_gates_triggered)
+        
+        if has_block_gate:
             recommendation = RecommendationOutcome.BLOCK
         elif (
-            hard_gates_triggered 
-            or len(reason_codes) > 0 
-            or score < 75 
-            or invoice.tax_inferred 
-            or (invoice.total_amount > 0 and total_tax == 0.0) 
+            len(hard_gates_triggered) > 0
+            or len(reason_codes) > 0
+            or score < 75
+            or invoice.tax_inferred
+            or (invoice.total_amount > 0 and total_tax == 0.0)
             or len(invoice.parsing_errors) > 0
+            or len(invoice.extraction_conflicts) > 0
+            or invoice.arithmetic_valid is not True
+            or invoice.gstin_format_valid is not True
+            or any(c.status in (CheckStatus.UNAVAILABLE, CheckStatus.NOT_FOUND) for c in field_checks)
         ):
             recommendation = RecommendationOutcome.MANUAL_REVIEW
         else:

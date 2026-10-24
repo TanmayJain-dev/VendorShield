@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from ..schemas.case import Case, CaseSummary
 from ..schemas.invoice import InvoiceClaim, InvoiceCorrection, FieldExtractionMeta
+from ..schemas.evidence import ManualGstinEvidenceRequest
+from ..services.providers.manual_provider import ManualEntryProvider
 from ..schemas.enums import CaseStatus, SourceMode, ExtractionStatus
 from ..services.parser.invoice_parser import extract_text_from_pdf_bytes, parse_invoice_text
 from ..services.extraction.pipeline import extract_invoice
@@ -387,3 +389,72 @@ async def get_case_file(case_id: str, db: Session = Depends(get_db)):
     ext = os.path.splitext(file_path)[1].lower()
     media_type = "application/pdf" if ext == ".pdf" else ("image/png" if ext == ".png" else "image/jpeg")
     return FileResponse(file_path, media_type=media_type, filename=files[0])
+
+
+@router.post("/{case_id}/evidence/gstin", response_model=Case)
+async def submit_manual_gstin_evidence(
+    case_id: str,
+    payload: ManualGstinEvidenceRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Submits reviewer-attested GST registration evidence from the public GST portal.
+    Appends authoritative EvidenceItem, automatically re-runs unified assessment,
+    records immutable audit event, and persists state.
+    """
+    case = CaseRepository.get_case(db, case_id)
+    if not case:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Case {case_id} not found")
+
+    provider = ManualEntryProvider(attested_by=payload.reviewer_id or "reviewer")
+    evidence_item = await provider.lookup(
+        gstin=payload.gstin,
+        case_context=payload.model_dump()
+    )
+
+    # Replace prior fallback/insufficient evidence for GST
+    case.evidence_items = [
+        ev for ev in case.evidence_items 
+        if not ("gst" in ev.source_name.lower() and ev.source_mode == SourceMode.UNAVAILABLE)
+    ]
+    case.evidence_items.append(evidence_item)
+
+    # Re-run unified assessment
+    assessment = assessment_service.assess(case)
+    case.assessment = assessment
+    case.status = CaseStatus.READY_FOR_REVIEW
+
+    # Recompute case snapshot hash & persist
+    case.audit_hash_sha256 = audit_service.compute_case_hash(case)
+    saved_case = CaseRepository.save_case(db, case)
+
+    # Record audit trail event
+    CaseRepository.add_audit_event(
+        db=db,
+        case_id=case_id,
+        event_type="MANUAL_REGISTRY_EVIDENCE_SUBMITTED",
+        actor=payload.reviewer_id or "reviewer",
+        actor_role="reviewer",
+        event_data={
+            "evidence_id": evidence_item.evidence_id,
+            "gstin": payload.gstin,
+            "legal_name": payload.legal_name,
+            "status": payload.status,
+            "new_verdict": assessment.recommendation.value
+        }
+    )
+
+    return saved_case
+
+
+@router.get("/{case_id}/explain")
+async def explain_case_verdict(case_id: str, db: Session = Depends(get_db)):
+    """
+    Returns a plain-English explanation of why the case received its verdict
+    and specific actions that would resolve or change the review status.
+    """
+    case = CaseRepository.get_case(db, case_id)
+    if not case:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Case {case_id} not found")
+    
+    return assessment_service.explain_verdict(case)

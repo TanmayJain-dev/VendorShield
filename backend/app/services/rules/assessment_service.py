@@ -87,4 +87,92 @@ class AssessmentService:
 
         return assessment
 
+    def explain_verdict(self, case: Case) -> Dict[str, Any]:
+        """
+        Produces a plain-English explanation of why the case received its verdict
+        and specific actions that would resolve or clear the review status.
+        """
+        assessment = case.assessment
+        if not assessment:
+            return {
+                "case_id": case.case_id,
+                "verdict": "NOT_ASSESSED",
+                "risk_score": 0,
+                "why_this_verdict": ["No automated assessment has been performed on this case."],
+                "what_would_change_it": ["Trigger vendor investigation or submit registry evidence."]
+            }
+
+        why_items: List[str] = []
+        action_items: List[str] = []
+
+        # Determine 'Why' items from triggered rules and hard gates
+        for rule in assessment.triggered_rules:
+            if rule.reason_code == "GSTIN_FORMAT_INVALID":
+                why_items.append("Supplier GSTIN failed official 15-character Modulo-36 format and checksum validation.")
+            elif rule.reason_code == "GST_STATUS_INACTIVE_CONFIRMED":
+                why_items.append("Supplier GST registration is confirmed Cancelled, Suspended, or Inactive on the public registry.")
+            elif rule.reason_code == "CRITICAL_NAME_MISMATCH":
+                why_items.append("Severe discrepancy between supplier name on invoice and registered legal entity name.")
+            elif rule.reason_code == "EINVOICE_QR_MISMATCH":
+                why_items.append("Tampering detected: Cryptographically verified E-Invoice QR code contradicts printed totals.")
+            elif rule.reason_code == "EVIDENCE_INSUFFICIENT" or rule.reason_code == "GST_STATUS_UNKNOWN":
+                why_items.append("Public GST registry data is currently unavailable (no active or manual lookup).")
+            elif rule.reason_code == "INVOICE_ARITHMETIC_MISMATCH":
+                why_items.append(f"Invoice mathematical totals do not reconcile: {rule.description}")
+            elif rule.reason_code == "BUYER_GSTIN_MISMATCH":
+                why_items.append("Billed Buyer GSTIN does not match any registered organization GSTIN.")
+            elif rule.reason_code == "BUYER_GSTIN_MISSING":
+                why_items.append("Buyer GSTIN is omitted from the invoice.")
+            elif rule.reason_code == "TAX_TYPE_STATE_MISMATCH":
+                why_items.append(f"State tax inconsistency: {rule.description}")
+            elif rule.reason_code == "FUTURE_INVOICE_DATE":
+                why_items.append("Invoice date is set in the future.")
+            elif rule.reason_code == "ITC_TIME_BAR_WARNING":
+                why_items.append("Invoice date exceeds statutory Section 16(4) ITC cut-off (30 Nov following FY).")
+            elif rule.reason_code == "EXTRACTION_CONFLICT":
+                why_items.append("Unresolved conflicts between document QR code, text, and OCR extraction layers.")
+            elif rule.reason_code == "BANK_OWNERSHIP_UNVERIFIED":
+                why_items.append("Bank account beneficiary ownership has not been attested by human review.")
+            elif rule.reason_code == "IFSC_INVALID":
+                why_items.append("Bank IFSC code was rejected by the RBI IFSC repository.")
+            elif rule.reason_code == "ZERO_TAX_UNVERIFIED":
+                why_items.append("Zero GST tax claimed on invoice without exemption proof.")
+            else:
+                why_items.append(rule.description)
+
+        # What would change it
+        if assessment.recommendation == RecommendationOutcome.BLOCK:
+            action_items.append("Reject invoice payment hold; vendor must reissue compliant invoice with valid GST registration.")
+            action_items.append("Verify whether vendor has obtained GST restoration order before re-evaluating.")
+        elif assessment.recommendation == RecommendationOutcome.MANUAL_REVIEW:
+            if "GST_STATUS_UNKNOWN" in assessment.reason_codes or "EVIDENCE_INSUFFICIENT" in assessment.reason_codes:
+                action_items.append("Submit verified GST portal taxpayer details via manual entry or connect registry API.")
+            if "INVOICE_ARITHMETIC_MISMATCH" in assessment.reason_codes or "TAX_BREAKDOWN_INFERRED" in assessment.reason_codes or "ZERO_TAX_UNVERIFIED" in assessment.reason_codes:
+                action_items.append("Confirm invoice line item arithmetic and exact tax rate breakdown (CGST/SGST/IGST).")
+            if "BUYER_GSTIN_MISMATCH" in assessment.reason_codes or "BUYER_GSTIN_MISSING" in assessment.reason_codes:
+                action_items.append("Confirm whether invoice was billed to an authorized sister organization or branch.")
+            if "BANK_OWNERSHIP_UNVERIFIED" in assessment.reason_codes:
+                action_items.append("Upload cancelled cheque or run penny-drop verification to confirm beneficiary bank account ownership.")
+            if "EXTRACTION_CONFLICT" in assessment.reason_codes:
+                action_items.append("Inspect original document image to manually confirm disputed fields.")
+            if not action_items:
+                action_items.append("Review flagged invoice fields and reconcile with supplier documentation.")
+        elif assessment.recommendation == RecommendationOutcome.PASS:
+            why_items = [
+                "Supplier GSTIN is valid with verified Modulo-36 checksum.",
+                "Active GST registration confirmed with matching business name.",
+                "Invoice line items, tax split, and totals verified without inference.",
+                "Buyer GSTIN and tax states match authorized company registrations."
+            ]
+            action_items.append("Ready for final AP analyst / reviewer sign-off and payment release.")
+
+        return {
+            "case_id": case.case_id,
+            "verdict": assessment.recommendation.value,
+            "risk_score": assessment.risk_score,
+            "score_policy": "Policy compliance index (0-100); not a statistical fraud probability.",
+            "why_this_verdict": why_items if why_items else ["Standard policy criteria met."],
+            "what_would_change_it": action_items
+        }
+
 assessment_service = AssessmentService()

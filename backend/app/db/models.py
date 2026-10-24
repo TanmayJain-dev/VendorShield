@@ -145,3 +145,32 @@ class AuditEventModel(Base):
     event_hash = Column(String(64), nullable=False)
 
     case = relationship("CaseModel", back_populates="audit_events")
+
+class IfscCacheModel(Base):
+    __tablename__ = "ifsc_cache"
+
+    ifsc = Column(String(32), primary_key=True, index=True)
+    bank_name = Column(String(256), nullable=False)
+    branch = Column(String(256), nullable=True)
+    city = Column(String(128), nullable=True)
+    state = Column(String(128), nullable=True)
+    cached_at = Column(DateTime, nullable=False)
+
+class Gstr2bEntryModel(Base):
+    __tablename__ = "gstr2b_entries"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    period = Column(String(32), index=True, nullable=False)
+    buyer_gstin = Column(String(32), index=True, nullable=False)
+    supplier_gstin = Column(String(32), index=True, nullable=False)
+    supplier_name = Column(String(256), nullable=True)
+    invoice_number = Column(String(128), index=True, nullable=False)
+    invoice_date = Column(String(64), nullable=True)
+    invoice_value = Column(Float, default=0.0)
+    taxable_value = Column(Float, default=0.0)
+    igst = Column(Float, default=0.0)
+    cgst = Column(Float, default=0.0)
+    sgst = Column(Float, default=0.0)
+    cess = Column(Float, default=0.0)
+    itc_available = Column(Boolean, default=True)
+    imported_at = Column(String(64), nullable=False)

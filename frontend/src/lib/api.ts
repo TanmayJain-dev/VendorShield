@@ -8,7 +8,8 @@ import {
   ManualGstinEvidenceRequest,
   ExplainVerdictResponse,
   AuditVerifyResponse,
-  Gstr2bImportResponse
+  Gstr2bImportResponse,
+  Gstr2bEntry
 } from '../types/api';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
@@ -209,5 +210,23 @@ export const api = {
       body: formData
     });
     return handleResponse<Gstr2bImportResponse>(res);
+  },
+
+  async getUnmatchedGstr2b(): Promise<Gstr2bEntry[]> {
+    const res = await fetch(`${API_BASE_URL}/gstr2b/unmatched`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      cache: 'no-store'
+    });
+    return handleResponse<Gstr2bEntry[]>(res);
+  },
+
+  async getGstr2bMatch(caseId: string): Promise<any> {
+    const res = await fetch(`${API_BASE_URL}/gstr2b/match/${encodeURIComponent(caseId)}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      cache: 'no-store'
+    });
+    return handleResponse<any>(res);
   }
 };

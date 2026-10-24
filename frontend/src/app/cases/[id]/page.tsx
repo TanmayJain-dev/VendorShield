@@ -55,6 +55,7 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
 
   // Verdict Explanation State
   const [explanation, setExplanation] = useState<ExplainVerdictResponse | null>(null);
+  const [gstr2bMatch, setGstr2bMatch] = useState<any>(null);
 
   // Audit Chain Verification State
   const [auditVerifyResult, setAuditVerifyResult] = useState<AuditVerifyResponse | null>(null);
@@ -106,6 +107,7 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
       if (data.assessment) {
         api.explainVerdict(caseId).then(setExplanation).catch(() => {});
       }
+            api.getGstr2bMatch(caseId).then(setGstr2bMatch).catch(() => {});
     } catch (err: any) {
       setError(err.message || 'Failed to load case');
     } finally {
@@ -583,6 +585,29 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
                     <span className="text-white text-sm">&#8377;{invoice.total_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
+
+                {/* GSTR-2B Filing Status Chip */}
+                {gstr2bMatch && (
+                  <div className="p-2.5 rounded bg-[#0b0f19] border border-slate-800 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-slate-400 text-[11px]">GSTR-2B Filed Return</span>
+                      <span className={`text-[10px] font-mono uppercase px-1.5 py-0.2 rounded font-semibold ${
+                        gstr2bMatch.status === 'MATCHED'
+                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                          : gstr2bMatch.status === 'VALUE_MISMATCH'
+                          ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                          : gstr2bMatch.status === 'ITC_NOT_AVAILABLE'
+                          ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                          : 'bg-slate-800 text-slate-400 border border-slate-700'
+                      }`}>
+                        {gstr2bMatch.status}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-300 font-mono">
+                      {gstr2bMatch.message}
+                    </div>
+                  </div>
+                )}
 
                 {/* Bank Account & IFSC */}
                 <div className="p-2.5 rounded bg-[#0b0f19] border border-slate-800 space-y-1">

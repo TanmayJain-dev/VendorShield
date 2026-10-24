@@ -342,7 +342,7 @@ async def correct_invoice_claims(
 
     # If case already had evidence or assessment, rerun unified assessment service
     if case.evidence_items or case.assessment:
-        fresh_assessment = assessment_service.assess(case)
+        fresh_assessment = assessment_service.assess(case, db=db)
         case.assessment = fresh_assessment
         case.status = CaseStatus.READY_FOR_REVIEW
 
@@ -420,7 +420,7 @@ async def submit_manual_gstin_evidence(
     case.evidence_items.append(evidence_item)
 
     # Re-run unified assessment
-    assessment = assessment_service.assess(case)
+    assessment = assessment_service.assess(case, db=db)
     case.assessment = assessment
     case.status = CaseStatus.READY_FOR_REVIEW
 

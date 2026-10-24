@@ -1,3 +1,4 @@
+import re
 import json
 import hashlib
 from typing import List, Optional, Tuple
@@ -6,7 +7,7 @@ from datetime import datetime, timezone
 
 from .models import (
     CaseModel, InvoiceModel, EvidenceItemModel,
-    AssessmentModel, ReviewActionModel, AuditEventModel
+    AssessmentModel, ReviewActionModel, AuditEventModel, Gstr2bEntryModel
 )
 from ..schemas.case import Case, CaseSummary
 from ..schemas.invoice import InvoiceClaim, LineItem, TaxBreakdownItem, FieldExtractionMeta
@@ -665,3 +666,91 @@ class CaseRepository:
             actor_role="system",
             event_data={"case_reference": "INV-2026-8841", "source": "benchmark_deck"}
         )
+
+    # --- GSTR-2B Reconciliation Persistence ---
+    @staticmethod
+    def save_gstr2b_entries(db: Session, entries: List[Gstr2bEntryModel]) -> int:
+        """Persists parsed GSTR-2B entries, avoiding duplicates for identical supplier, invoice, and period."""
+        count = 0
+        for entry in entries:
+            existing = db.query(Gstr2bEntryModel).filter(
+                Gstr2bEntryModel.supplier_gstin == entry.supplier_gstin,
+                Gstr2bEntryModel.invoice_number == entry.invoice_number,
+                Gstr2bEntryModel.period == entry.period
+            ).first()
+
+            if existing:
+                existing.invoice_value = entry.invoice_value
+                existing.taxable_value = entry.taxable_value
+                existing.igst = entry.igst
+                existing.cgst = entry.cgst
+                existing.sgst = entry.sgst
+                existing.cess = entry.cess
+                existing.itc_available = entry.itc_available
+                existing.imported_at = entry.imported_at
+            else:
+                db.add(entry)
+            count += 1
+
+        db.commit()
+        return count
+
+    @staticmethod
+    def find_gstr2b_entry(db: Session, supplier_gstin: Optional[str], invoice_number: Optional[str]) -> Optional[Gstr2bEntryModel]:
+        """Matches an invoice against GSTR-2B on normalized supplier GSTIN and invoice number."""
+        if not supplier_gstin or not invoice_number:
+            return None
+
+        clean_gstin = supplier_gstin.strip().upper()
+        clean_inv = re.sub(r"[^\w]", "", invoice_number).upper()
+
+        # Query entries for this supplier
+        candidates = db.query(Gstr2bEntryModel).filter(
+            Gstr2bEntryModel.supplier_gstin == clean_gstin
+        ).all()
+
+        for c in candidates:
+            cand_inv = re.sub(r"[^\w]", "", c.invoice_number).upper()
+            if cand_inv == clean_inv:
+                return c
+
+        return None
+
+    @staticmethod
+    def has_gstr2b_entries_for_buyer(db: Session, buyer_gstin: Optional[str]) -> bool:
+        """Checks if any GSTR-2B records exist for the given buyer GSTIN."""
+        if not buyer_gstin:
+            return db.query(Gstr2bEntryModel).first() is not None
+        clean_buyer = buyer_gstin.strip().upper()
+        return db.query(Gstr2bEntryModel).filter(Gstr2bEntryModel.buyer_gstin == clean_buyer).first() is not None
+
+    @staticmethod
+    def list_gstr2b_entries(db: Session, limit: int = 100) -> List[Gstr2bEntryModel]:
+        """Returns recent GSTR-2B entries ordered by import date."""
+        return db.query(Gstr2bEntryModel).order_by(Gstr2bEntryModel.id.desc()).limit(limit).all()
+
+    @staticmethod
+    def find_unmatched_gstr2b_entries(db: Session) -> List[Gstr2bEntryModel]:
+        """Returns GSTR-2B entries that have not been claimed by any registered case."""
+        all_entries = db.query(Gstr2bEntryModel).all()
+        cases = db.query(CaseModel).all()
+
+        claimed_keys = set()
+        for c in cases:
+            if c.invoice and c.invoice.gstin and c.invoice.invoice_number:
+                norm_key = (
+                    c.invoice.gstin.strip().upper(),
+                    re.sub(r"[^\w]", "", c.invoice.invoice_number).upper()
+                )
+                claimed_keys.add(norm_key)
+
+        unmatched = []
+        for e in all_entries:
+            e_key = (
+                e.supplier_gstin.strip().upper(),
+                re.sub(r"[^\w]", "", e.invoice_number).upper()
+            )
+            if e_key not in claimed_keys:
+                unmatched.append(e)
+
+        return unmatched

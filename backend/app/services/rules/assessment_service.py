@@ -1,3 +1,4 @@
+from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 from ...schemas.case import Case
 from ...schemas.assessment import RiskAssessment
@@ -33,16 +34,31 @@ class AssessmentService:
         case: Case,
         directors: Optional[List[DirectorProfile]] = None,
         address_cluster: Optional[AddressClusterProfile] = None,
-        litigation_meta: Optional[Dict[str, Any]] = None
+        litigation_meta: Optional[Dict[str, Any]] = None,
+        db: Optional[Session] = None,
+        gstr2b_entry: Optional[Any] = None,
+        buyer_has_gstr2b: bool = False
     ) -> RiskAssessment:
         if not case.invoice:
             raise ValueError(f"Cannot assess case {case.case_id}: invoice claims are missing")
 
+        # 0. Check GSTR-2B entry if db provided
+        if db and gstr2b_entry is None:
+            from ...db.repository import CaseRepository
+            gstr2b_entry = CaseRepository.find_gstr2b_entry(db, case.invoice.gstin, case.invoice.invoice_number)
+            buyer_has_gstr2b = CaseRepository.has_gstr2b_entries_for_buyer(db, case.invoice.buyer_gstin)
+
         # 1. Reconcile invoice against all current evidence items
         field_checks = self.reconciler.reconcile(case.invoice, case.evidence_items)
 
-        # 2. Run core deterministic rules engine
-        assessment = self.rule_engine.evaluate(case.case_id, case.invoice, field_checks)
+        # 2. Run core deterministic rules engine with GSTR-2B facts
+        assessment = self.rule_engine.evaluate(
+            case.case_id,
+            case.invoice,
+            field_checks,
+            gstr2b_entry=gstr2b_entry,
+            buyer_has_gstr2b=buyer_has_gstr2b
+        )
 
         # 3. Additive forensic vectors if enabled or demo
         is_demo = getattr(case, "is_demo", False)
@@ -107,7 +123,16 @@ class AssessmentService:
 
         # Determine 'Why' items from triggered rules and hard gates
         for rule in assessment.triggered_rules:
-            if rule.reason_code == "GSTIN_FORMAT_INVALID":
+            if rule.reason_code == "ITC_NOT_IN_GSTR2B":
+                why_items.append("Invoice is missing from imported GSTR-2B returns filed by suppliers.")
+                action_items.append("Place payment on hold until supplier files GSTR-1 or re-import the updated GSTR-2B.")
+            elif rule.reason_code == "GSTR2B_VALUE_MISMATCH":
+                why_items.append("Invoice gross amount contradicts the value reported by the supplier in GSTR-2B.")
+                action_items.append("Request credit note or amended invoice matching the filed GSTR-1 value.")
+            elif rule.reason_code == "GSTR2B_ITC_NOT_AVAILABLE":
+                why_items.append("Supplier explicitly marked this invoice as ineligible for Input Tax Credit (itcavl=N).")
+                action_items.append("Hold the GST tax portion of the payment until supplier amends their GSTR-1 return.")
+            elif rule.reason_code == "GSTIN_FORMAT_INVALID":
                 why_items.append("Supplier GSTIN failed official 15-character Modulo-36 format and checksum validation.")
             elif rule.reason_code == "GST_STATUS_INACTIVE_CONFIRMED":
                 why_items.append("Supplier GST registration is confirmed Cancelled, Suspended, or Inactive on the public registry.")

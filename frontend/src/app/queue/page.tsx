@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { api } from '../../lib/api';
-import { CaseSummary } from '../../types/api';
+import { CaseSummary, Gstr2bEntry, Gstr2bImportResponse } from '../../types/api';
 import {
   RotateCcw,
   Plus,
@@ -18,7 +18,9 @@ import {
   X,
   FileText,
   Download,
-  Filter
+  Filter,
+  Layers,
+  UploadCloud
 } from 'lucide-react';
 
 export default function QueuePage() {
@@ -28,6 +30,36 @@ export default function QueuePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'MANUAL_REVIEW' | 'PASS' | 'BLOCK' | 'PENDING'>('ALL');
   const [includeDemo, setIncludeDemo] = useState(true);
+  const [gstr2bModalOpen, setGstr2bModalOpen] = useState(false);
+  const [gstr2bFile, setGstr2bFile] = useState<File | null>(null);
+  const [gstr2bImporting, setGstr2bImporting] = useState(false);
+  const [gstr2bImportMsg, setGstr2bImportMsg] = useState<string | null>(null);
+  const [unmatchedRows, setUnmatchedRows] = useState<Gstr2bEntry[]>([]);
+  const [gstr2bTab, setGstr2bTab] = useState<'import' | 'unmatched'>('import');
+
+  const fetchUnmatchedGstr2b = async () => {
+    try {
+      const rows = await api.getUnmatchedGstr2b();
+      setUnmatchedRows(rows);
+    } catch {}
+  };
+
+  const handleGstr2bImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!gstr2bFile) return;
+    setGstr2bImporting(true);
+    setGstr2bImportMsg(null);
+    try {
+      const res = await api.importGstr2b(gstr2bFile);
+      setGstr2bImportMsg(`${res.message} (Period: ${res.return_period || 'Current'})`);
+      fetchCases();
+      fetchUnmatchedGstr2b();
+    } catch (err: any) {
+      setGstr2bImportMsg('Error: ' + (err.message || 'Import failed'));
+    } finally {
+      setGstr2bImporting(false);
+    }
+  };
 
   const fetchCases = async () => {
     setLoading(true);
@@ -136,6 +168,14 @@ export default function QueuePage() {
         </div>
 
         <div className="flex items-center space-x-2.5 shrink-0 flex-wrap">
+          <button
+            onClick={() => { setGstr2bModalOpen(true); fetchUnmatchedGstr2b(); }}
+            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 hover:bg-teal-100 dark:hover:bg-teal-900/40 transition-colors shadow-subtle"
+          >
+            <Layers className="h-3.5 w-3.5" />
+            <span>GSTR-2B Returns</span>
+          </button>
+
           <button
             onClick={exportCsv}
             disabled={filteredCases.length === 0}
@@ -457,6 +497,138 @@ export default function QueuePage() {
           </table>
         </div>
       </div>
+ 
+      {/* GSTR-2B Import & Unmatched Rows Modal */}
+      {gstr2bModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-reveal-up">
+          <div className="bg-white dark:bg-[#0e1420] border border-zinc-200 dark:border-zinc-800 rounded-xl max-w-2xl w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <Layers className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                <h3 className="text-xs font-bold font-mono uppercase text-zinc-900 dark:text-zinc-100">
+                  GSTR-2B Reconciliation &amp; ITC Verification
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGstr2bModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs font-mono"
+              >
+                &times; Close
+              </button>
+            </div>
+
+            {/* Tab switch */}
+            <div className="flex items-center space-x-1 border border-zinc-200 dark:border-zinc-800 rounded-lg p-0.5 bg-zinc-50 dark:bg-zinc-900 text-xs">
+              <button
+                type="button"
+                onClick={() => setGstr2bTab('import')}
+                className={`flex-1 py-1.5 rounded-md font-mono text-[11px] font-semibold transition ${
+                  gstr2bTab === 'import' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500'
+                }`}
+              >
+                Import Return JSON
+              </button>
+              <button
+                type="button"
+                onClick={() => { setGstr2bTab('unmatched'); fetchUnmatchedGstr2b(); }}
+                className={`flex-1 py-1.5 rounded-md font-mono text-[11px] font-semibold transition ${
+                  gstr2bTab === 'unmatched' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500'
+                }`}
+              >
+                Unclaimed Return Rows ({unmatchedRows.length})
+              </button>
+            </div>
+
+            {gstr2bTab === 'import' ? (
+              <form onSubmit={handleGstr2bImport} className="space-y-4 text-xs">
+                <p className="text-zinc-600 dark:text-zinc-300 text-[11px] leading-relaxed">
+                  Upload an official GSTR-2B JSON file downloaded from the GST Portal. VendorShield matches supplier filings against incoming accounts payable invoices to verify Input Tax Credit eligibility.
+                </p>
+
+                <div className="border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg p-6 text-center space-y-2">
+                  <UploadCloud className="h-8 w-8 text-teal-600 mx-auto" />
+                  <div className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+                    {gstr2bFile ? gstr2bFile.name : 'Select GSTR-2B JSON Return File'}
+                  </div>
+                  <label className="inline-block mt-2 px-3 py-1.5 rounded bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-300 font-mono text-[11px] cursor-pointer hover:bg-teal-100 transition">
+                    Browse File
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={(e) => setGstr2bFile(e.target.files?.[0] || null)}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {gstr2bImportMsg && (
+                  <div className="p-3 rounded bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 text-teal-800 dark:text-teal-300 text-xs font-mono">
+                    {gstr2bImportMsg}
+                  </div>
+                )}
+
+                <div className="flex justify-end space-x-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={() => setGstr2bModalOpen(false)}
+                    className="px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-700"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!gstr2bFile || gstr2bImporting}
+                    className="px-4 py-1.5 text-xs font-semibold rounded bg-teal-700 hover:bg-teal-600 text-white transition disabled:opacity-50"
+                  >
+                    {gstr2bImporting ? 'Parsing & Ingesting...' : 'Ingest GSTR-2B Return'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-3 text-xs">
+                <div className="text-[11px] text-zinc-500">
+                  These invoices were filed by suppliers in GSTR-2B, but have not yet been submitted or ingested into VendorShield:
+                </div>
+                <div className="max-h-60 overflow-y-auto border border-zinc-200 dark:border-zinc-800 rounded-lg">
+                  {unmatchedRows.length === 0 ? (
+                    <div className="p-6 text-center text-zinc-400 font-mono text-xs">
+                      No unclaimed GSTR-2B entries. All filed rows are matched or no return imported.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-[11px] border-collapse">
+                      <thead className="bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 font-mono text-zinc-400 uppercase">
+                        <tr>
+                          <th className="p-2">Supplier GSTIN</th>
+                          <th className="p-2">Invoice #</th>
+                          <th className="p-2">Amount (₹)</th>
+                          <th className="p-2">ITC Avail</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                        {unmatchedRows.map((r, i) => (
+                          <tr key={i} className="hover:bg-zinc-50 dark:hover:bg-zinc-850">
+                            <td className="p-2 font-mono text-teal-600 dark:text-teal-400">{r.supplier_gstin}</td>
+                            <td className="p-2 font-mono text-zinc-800 dark:text-zinc-200">{r.invoice_number}</td>
+                            <td className="p-2 font-mono text-zinc-900 dark:text-zinc-100 tabular-nums">₹{r.invoice_value?.toLocaleString('en-IN') || '0'}</td>
+                            <td className="p-2 font-mono">
+                              {r.itc_available ? (
+                                <span className="text-emerald-500">YES</span>
+                              ) : (
+                                <span className="text-rose-500">NO</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

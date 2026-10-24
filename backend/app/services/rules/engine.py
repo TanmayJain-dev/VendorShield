@@ -25,7 +25,9 @@ class DeterministicRuleEngine:
         self,
         case_id: str,
         invoice: InvoiceClaim,
-        field_checks: List[FieldCheckResult]
+        field_checks: List[FieldCheckResult],
+        gstr2b_entry: Optional[Any] = None,
+        buyer_has_gstr2b: bool = False
     ) -> RiskAssessment:
         triggered_rules: List[RuleTrigger] = []
         reason_codes: List[str] = []
@@ -471,6 +473,52 @@ class DeterministicRuleEngine:
             # Track verified active GST status
             if check.field_name == "gst_status" and check.status == CheckStatus.MATCH:
                 gst_status_active_verified = True
+
+
+        # --- Rule 13: GSTR-2B Reconciliation & ITC Eligibility ---
+        if gstr2b_entry:
+            # Check value mismatch
+            if abs(invoice.total_amount - gstr2b_entry.invoice_value) > 2.0:
+                rule = RuleTrigger(
+                    rule_id="RULE_GSTR2B_VALUE_MISMATCH",
+                    rule_name="GSTR-2B Filed Value Discrepancy",
+                    severity="HIGH",
+                    weight=25,
+                    is_hard_gate=False,
+                    reason_code="GSTR2B_VALUE_MISMATCH",
+                    description=f"Invoice amount (INR {invoice.total_amount:.2f}) does not match GSTR-2B filed value (INR {gstr2b_entry.invoice_value:.2f})."
+                )
+                triggered_rules.append(rule)
+                reason_codes.append("GSTR2B_VALUE_MISMATCH")
+                score -= 25
+
+            # Check ITC Availability flag
+            if not getattr(gstr2b_entry, "itc_available", True):
+                rule = RuleTrigger(
+                    rule_id="RULE_GSTR2B_ITC_NOT_AVAILABLE",
+                    rule_name="ITC Ineligible in GSTR-2B Return",
+                    severity="MEDIUM",
+                    weight=20,
+                    is_hard_gate=False,
+                    reason_code="GSTR2B_ITC_NOT_AVAILABLE",
+                    description="Supplier flagged this invoice with ITC Available = 'No' in GSTR-2B filing."
+                )
+                triggered_rules.append(rule)
+                reason_codes.append("GSTR2B_ITC_NOT_AVAILABLE")
+                score -= 20
+        elif buyer_has_gstr2b:
+            rule = RuleTrigger(
+                rule_id="RULE_ITC_NOT_IN_GSTR2B",
+                rule_name="Invoice Missing From GSTR-2B Filing",
+                severity="MEDIUM",
+                weight=20,
+                is_hard_gate=False,
+                reason_code="ITC_NOT_IN_GSTR2B",
+                description="Invoice not found in imported GSTR-2B return. Payment hold advised until supplier files GSTR-1."
+            )
+            triggered_rules.append(rule)
+            reason_codes.append("ITC_NOT_IN_GSTR2B")
+            score -= 20
 
         # Normalize score bounds
         score = max(0, min(100, score))

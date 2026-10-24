@@ -7,6 +7,7 @@ from .api.cases import router as cases_router
 from .api.investigate import router as investigate_router
 from .api.review import router as review_router
 from .api.reports import router as reports_router
+from .api.gstr2b import router as gstr2b_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -49,6 +50,7 @@ app.include_router(cases_router, prefix="/api")
 app.include_router(investigate_router, prefix="/api")
 app.include_router(review_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
+app.include_router(gstr2b_router, prefix="/api")
 
 @app.get("/health", tags=["health"])
 async def health_check():

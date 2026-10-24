@@ -1,29 +1,22 @@
 'use client';
 
 import { use, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { api } from '../../../lib/api';
-import { Case, ReviewActionType, CheckStatus } from '../../../types/api';
-import {
-  ArrowLeft,
-  RotateCcw,
-  Download,
+import { Case, ReviewActionType, InvoiceCorrection } from '../../../types/api';
+import { 
+  ShieldAlert, 
+  CheckCircle2, 
+  AlertTriangle, 
+  ShieldX, 
+  ExternalLink, 
+  RefreshCw, 
+  Download, 
   Lock,
-  ExternalLink,
-  AlertCircle,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  HelpCircle,
-  ShieldCheck,
-  ShieldAlert,
-  ShieldX,
-  FileText,
-  Building2,
-  Database,
-  Globe,
-  UserCheck,
-  Check
+  Cpu,
+  Edit3,
+  Copy,
+  History,
+  Info
 } from 'lucide-react';
 
 export default function CaseDossierPage({ params }: { params: Promise<{ id: string }> }) {
@@ -34,6 +27,8 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
   const [loading, setLoading] = useState(true);
   const [investigating, setInvestigating] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Review Form State
@@ -41,13 +36,30 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
   const [reviewAction, setReviewAction] = useState<ReviewActionType>('APPROVE_WITH_EXCEPTION');
   const [rationale, setRationale] = useState('');
 
+  // Correction Form State
+  const [corrSupplier, setCorrSupplier] = useState('');
+  const [corrLegalName, setCorrLegalName] = useState('');
+  const [corrGstin, setCorrGstin] = useState('');
+  const [corrInvNumber, setCorrInvNumber] = useState('');
+  const [corrTotalAmount, setCorrTotalAmount] = useState('');
+  const [corrTaxableAmount, setCorrTaxableAmount] = useState('');
+  const [corrNotes, setCorrNotes] = useState('');
+
   const fetchCase = async () => {
     setLoading(true);
     try {
       const data = await api.getCase(caseId);
       setCaseData(data);
+      if (data.invoice) {
+        setCorrSupplier(data.invoice.supplier_name || '');
+        setCorrLegalName(data.invoice.legal_name || '');
+        setCorrGstin(data.invoice.gstin || '');
+        setCorrInvNumber(data.invoice.invoice_number || '');
+        setCorrTotalAmount(data.invoice.total_amount ? String(data.invoice.total_amount) : '');
+        setCorrTaxableAmount(data.invoice.taxable_amount ? String(data.invoice.taxable_amount) : '');
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to load case record.');
+      setError(err.message || 'Failed to load case');
     } finally {
       setLoading(false);
     }
@@ -64,7 +76,7 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
       const updated = await api.triggerInvestigation(caseId);
       setCaseData(updated);
     } catch (err: any) {
-      setError(err.message || 'TinyFish investigation encountered an error.');
+      setError(err.message || 'Investigation failed');
     } finally {
       setInvestigating(false);
     }
@@ -79,13 +91,38 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
         reviewer_id: reviewerId,
         action: reviewAction,
         rationale: rationale,
-        requested_documents: [],
+        requested_documents: []
       });
       setCaseData(updated);
     } catch (err: any) {
-      setError(err.message || 'Failed to record review decision.');
+      setError(err.message || 'Failed to submit review');
     } finally {
       setReviewing(false);
+    }
+  };
+
+  const handleCorrectionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCorrecting(true);
+    setError(null);
+    try {
+      const payload: InvoiceCorrection = {
+        corrected_supplier_name: corrSupplier.trim() || undefined,
+        corrected_legal_name: corrLegalName.trim() || undefined,
+        corrected_gstin: corrGstin.trim() ? corrGstin.trim().toUpperCase() : undefined,
+        corrected_invoice_number: corrInvNumber.trim() || undefined,
+        corrected_total_amount: corrTotalAmount ? parseFloat(corrTotalAmount) : undefined,
+        corrected_taxable_amount: corrTaxableAmount ? parseFloat(corrTaxableAmount) : undefined,
+        correction_notes: corrNotes.trim() || 'Manual reviewer correction',
+        reviewer_id: reviewerId
+      };
+      const updated = await api.correctInvoice(caseId, payload);
+      setCaseData(updated);
+      setShowEditModal(false);
+    } catch (err: any) {
+      setError(err.message || 'Failed to apply invoice corrections');
+    } finally {
+      setCorrecting(false);
     }
   };
 
@@ -103,332 +140,341 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
     }
   };
 
-  const formatINR = (val?: number) => {
-    if (val === undefined || val === null) return '₹0.00';
-    return `₹${val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
   if (loading) {
     return (
-      <div className="py-24 text-center space-y-3 text-xs text-zinc-500 animate-reveal-up">
-        <RotateCcw className="h-6 w-6 animate-spin mx-auto text-teal-600 dark:text-teal-400" />
-        <p className="font-medium text-zinc-700 dark:text-zinc-300">Retrieving evidence dossier {caseId}...</p>
+      <div className="py-20 text-center text-xs font-mono text-slate-400">
+        Loading case evidence dossier...
       </div>
     );
   }
 
   if (!caseData || !caseData.invoice) {
     return (
-      <div className="py-20 text-center space-y-3">
-        <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">Case or invoice claim not found.</p>
-        <Link href="/queue" className="text-xs text-teal-700 dark:text-teal-400 font-semibold hover:underline">
-          &larr; Return to Cases Queue
-        </Link>
+      <div className="py-20 text-center text-xs text-rose-400 font-mono">
+        Case or invoice data not found.
       </div>
     );
   }
 
-  const { invoice, assessment, evidence_items, review, source_mode } = caseData;
+  const { invoice, assessment, evidence_items, review, source_mode, duplicate_type, review_history } = caseData;
 
   return (
-    <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 animate-reveal-up">
-      {/* Top Breadcrumb & Cryptographic Fingerprint */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs pb-1">
-        <Link
-          href="/queue"
-          className="inline-flex items-center space-x-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors font-medium"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          <span>Back to Verification Queue</span>
-        </Link>
-
-        {caseData.audit_hash_sha256 && (
-          <div className="flex items-center space-x-1.5 text-[11px] text-zinc-400 font-mono bg-zinc-100/60 dark:bg-zinc-900/60 px-2.5 py-1 rounded-md border border-zinc-200/60 dark:border-zinc-800/60">
-            <Lock className="h-3 w-3 text-teal-600 dark:text-teal-400" />
-            <span className="text-zinc-500">SHA-256:</span>
-            <code className="text-zinc-700 dark:text-zinc-300 font-semibold">
-              {caseData.audit_hash_sha256.substring(0, 20)}...
-            </code>
-          </div>
-        )}
-      </div>
-
-      {/* Case Header & Actions Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-5 border-b border-zinc-200/90 dark:border-zinc-800/90">
-        <div className="space-y-1">
-          <div className="flex items-center space-x-2">
-            <span className="font-mono text-xs font-bold text-teal-700 dark:text-teal-400">
+    <div className="space-y-6">
+      {/* Top Header & Telemetry */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+        <div>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="text-xs uppercase font-mono px-2 py-0.5 rounded bg-slate-800 text-cyan-400 border border-slate-700">
               {caseData.case_reference}
             </span>
-            <span className="text-zinc-300 dark:text-zinc-700">&bull;</span>
-            <span className="font-mono text-[11px] text-zinc-400">
-              {caseData.case_id}
-            </span>
-            <span className="text-zinc-300 dark:text-zinc-700">&bull;</span>
-            <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400">
-              {source_mode === 'SIMULATED' ? 'Simulated Evidence' : 'Live TinyFish'}
-            </span>
+            <span className="text-xs font-mono text-slate-400">Case ID: {caseData.case_id}</span>
+            {source_mode === 'SIMULATED' ? (
+              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-950/60 text-amber-400 border border-amber-800/60">
+                Simulated Evidence Mode
+              </span>
+            ) : source_mode === 'LIVE' ? (
+              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800/60 flex items-center gap-1">
+                <Cpu className="h-3 w-3" /> Live TinyFish Research
+              </span>
+            ) : (
+              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                Evidence Unavailable
+              </span>
+            )}
+            {duplicate_type && (
+              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800 flex items-center gap-1">
+                <Copy className="h-3 w-3" /> {duplicate_type}
+              </span>
+            )}
           </div>
-
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-            {invoice.supplier_name}
+          <h1 className="text-xl sm:text-2xl font-bold text-white mt-1.5 flex items-center gap-2">
+            <span>{invoice.supplier_name}</span>
+            <span className="text-sm font-mono text-slate-400 font-normal">
+              (&#8377;{invoice.total_amount.toLocaleString('en-IN')})
+            </span>
           </h1>
-          <div className="text-xs text-zinc-500 dark:text-zinc-400">
-            Invoice #{invoice.invoice_number} &bull; Total Claimed: <strong className="text-zinc-900 dark:text-zinc-100 font-mono">{formatINR(invoice.total_amount)}</strong>
-          </div>
         </div>
 
-        <div className="flex items-center space-x-2.5 shrink-0">
+        <div className="flex items-center gap-3">
           <button
-            type="button"
-            onClick={handleDownloadReport}
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/80 transition-colors shadow-subtle"
+            onClick={() => setShowEditModal(true)}
+            className="flex items-center gap-1.5 text-xs text-cyan-300 hover:text-white bg-slate-900 border border-cyan-800/60 px-3 py-1.5 rounded-md hover:bg-slate-800 transition"
           >
-            <Download className="h-3.5 w-3.5" />
+            <Edit3 className="h-3.5 w-3.5 text-cyan-400" />
+            <span>Correct Claims</span>
+          </button>
+
+          <button
+            onClick={handleDownloadReport}
+            className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-md hover:bg-slate-800 transition"
+          >
+            <Download className="h-3.5 w-3.5 text-slate-400" />
             <span>Export Audit Trail</span>
           </button>
 
           {caseData.status === 'PARSED' && (
             <button
-              type="button"
               onClick={handleRunInvestigation}
               disabled={investigating}
-              className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-md text-xs font-semibold text-white bg-teal-700 hover:bg-teal-600 dark:bg-teal-600 dark:hover:bg-teal-500 transition-colors shadow-subtle disabled:opacity-50"
+              className="flex items-center gap-2 text-xs font-semibold bg-cyan-500 hover:bg-cyan-400 text-slate-950 px-4 py-1.5 rounded-md transition disabled:opacity-50"
             >
-              <RotateCcw className={`h-3.5 w-3.5 ${investigating ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${investigating ? 'animate-spin' : ''}`} />
               <span>{investigating ? 'Running TinyFish...' : 'Run Investigation'}</span>
-            </button>
-          )}
-
-          {caseData.status !== 'PARSED' && !review && (
-            <button
-              type="button"
-              onClick={handleRunInvestigation}
-              disabled={investigating}
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50"
-            >
-              <RotateCcw className={`h-3.5 w-3.5 ${investigating ? 'animate-spin' : ''}`} />
-              <span>Re-run Investigation</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Error Alert */}
       {error && (
-        <div className="p-3.5 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-800 dark:text-rose-300 flex items-center space-x-2">
-          <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0" />
-          <span>{error}</span>
+        <div className="p-3 bg-rose-950/60 border border-rose-800 rounded text-rose-300 text-xs">
+          {error}
         </div>
       )}
 
-      {/* Recommendation Banner — High-Contrast Authoritative Verdict */}
-      {assessment ? (
-        <div
-          className={`p-5 sm:p-6 rounded-xl border text-xs space-y-3.5 shadow-subtle ${
-            assessment.recommendation === 'PASS'
-              ? 'border-emerald-300 dark:border-emerald-800/80 bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-950 dark:text-emerald-100'
-              : assessment.recommendation === 'MANUAL_REVIEW'
-              ? 'border-amber-300 dark:border-amber-800/80 bg-amber-50/70 dark:bg-amber-950/30 text-amber-950 dark:text-amber-100'
-              : 'border-rose-300 dark:border-rose-800/80 bg-rose-50/70 dark:bg-rose-950/30 text-rose-950 dark:text-rose-100'
-          }`}
-        >
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-            <div className="space-y-1.5">
-              <div className="flex items-center space-x-2">
-                {assessment.recommendation === 'PASS' && <ShieldCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />}
-                {assessment.recommendation === 'MANUAL_REVIEW' && <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />}
-                {assessment.recommendation === 'BLOCK' && <ShieldAlert className="h-5 w-5 text-rose-600 dark:text-rose-400" />}
-                <span className="font-bold text-sm tracking-tight uppercase">
-                  VERDICT: {assessment.recommendation.replace(/_/g, ' ')}
-                </span>
-                <span className="text-zinc-400">&bull;</span>
-                <span className="font-mono font-bold text-xs">
-                  Risk Score: {assessment.risk_score ?? '—'}/100
-                </span>
-              </div>
-              <p className="text-xs opacity-90 max-w-2xl leading-relaxed">
-                {assessment.recommendation === 'MANUAL_REVIEW'
-                  ? 'Field discrepancies or unverified claims detected. Fail-closed policy requires authorized sign-off.'
-                  : assessment.recommendation === 'BLOCK'
-                  ? 'Hard safety gate triggered. Suspended entity status or severe mismatch identified. Capital release halted.'
-                  : 'All critical claims reconciled against authoritative public registers. Ready for human authorization.'}
-              </p>
-            </div>
-
-            <div className="text-right text-[11px] text-zinc-500 dark:text-zinc-400 font-mono self-start sm:self-auto shrink-0">
-              <div>Rule Engine v{assessment.ruleset_version}</div>
-              <div>Completeness: {assessment.evidence_completeness}</div>
-            </div>
-          </div>
-
-          {/* Reason Code Tags */}
-          {assessment.reason_codes.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {assessment.reason_codes.map((rc) => (
-                <span
-                  key={rc}
-                  className="px-2 py-0.5 rounded font-mono text-[10px] bg-white/80 dark:bg-black/30 border border-current opacity-80"
-                >
-                  {rc}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 text-xs text-zinc-500 flex items-center justify-between">
-          <span>Awaiting TinyFish evidence collection and deterministic risk evaluation.</span>
-          <button
-            onClick={handleRunInvestigation}
-            disabled={investigating}
-            className="px-3 py-1 rounded bg-teal-600 text-white font-medium text-xs hover:bg-teal-500"
-          >
-            {investigating ? 'Running...' : 'Run Investigation'}
-          </button>
+      {/* Duplicate Notice Banner */}
+      {duplicate_type && (
+        <div className="p-3 bg-amber-950/40 border border-amber-800 rounded-lg text-amber-200 text-xs flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0" />
+          <span>
+            <strong>Duplicate Alert:</strong> Detected {duplicate_type} (Previous Case: {caseData.duplicate_of_case_id || 'System Archive'}). Please verify if this is an intentional reissue or duplicate submission before approval.
+          </span>
         </div>
       )}
 
-      {/* Main Split Grid: Claims vs. Reconciliations */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        {/* Left Column: Supplier Claim Profile Card */}
-        <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-xl p-5 space-y-4 shadow-subtle">
-          <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 pb-2 border-b border-zinc-100 dark:border-zinc-800/80">
-            Invoice Claim Profile
-          </div>
+      {/* Scanned Image / OCR Alert */}
+      {invoice.is_scanned_image && (
+        <div className="p-3 bg-blue-950/40 border border-blue-800/80 rounded-lg text-blue-200 text-xs flex items-center gap-2">
+          <Info className="h-4 w-4 text-blue-400 flex-shrink-0" />
+          <span>
+            <strong>Scanned Document:</strong> {invoice.ocr_status_message || 'Document has no native text layer. Review extracted values and use Correct Claims if necessary.'}
+          </span>
+        </div>
+      )}
 
-          <div className="space-y-3.5 text-xs">
-            <div>
-              <div className="text-[11px] text-zinc-400 font-medium">Declared Supplier</div>
-              <div className="font-semibold text-zinc-900 dark:text-zinc-100 mt-0.5">
-                {invoice.supplier_name}
-              </div>
-              {invoice.legal_name && (
-                <div className="text-[11px] text-zinc-500">Legal: {invoice.legal_name}</div>
-              )}
-            </div>
-
-            <div>
-              <div className="text-[11px] text-zinc-400 font-medium">Supplier GSTIN</div>
-              <div className="mt-0.5 flex items-center space-x-2">
-                <span className="font-mono font-bold text-teal-700 dark:text-teal-300">
-                  {invoice.gstin || 'Not extracted'}
-                </span>
-                {invoice.gstin_format_valid !== undefined && (
-                  <span
-                    className={`text-[9.5px] px-1.5 py-0.2 rounded font-semibold ${
-                      invoice.gstin_format_valid
-                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400'
-                        : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400'
-                    }`}
-                  >
-                    {invoice.gstin_format_valid ? 'Luhn Valid' : 'Format Invalid'}
+      {/* Recommendation Banner */}
+      {assessment && (
+        <div className={`rounded-xl p-5 border ${
+          assessment.recommendation === 'PASS' 
+            ? 'bg-emerald-950/30 border-emerald-800/70' 
+            : assessment.recommendation === 'MANUAL_REVIEW'
+            ? 'bg-amber-950/30 border-amber-800/70'
+            : 'bg-rose-950/30 border-rose-800/70'
+        }`}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              {assessment.recommendation === 'PASS' && <CheckCircle2 className="h-6 w-6 text-emerald-400 flex-shrink-0 mt-0.5" />}
+              {assessment.recommendation === 'MANUAL_REVIEW' && <AlertTriangle className="h-6 w-6 text-amber-400 flex-shrink-0 mt-0.5" />}
+              {assessment.recommendation === 'BLOCK' && <ShieldX className="h-6 w-6 text-rose-400 flex-shrink-0 mt-0.5" />}
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-bold tracking-wide uppercase font-mono text-white">
+                    Recommendation: {assessment.recommendation}
+                  </h2>
+                  <span className="text-xs font-mono text-slate-400">
+                    &bull; Policy Compliance Score: <strong className="text-white">{assessment.risk_score}</strong>/100 (Uncalibrated Heuristic Indicator)
                   </span>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <div className="text-[11px] text-zinc-400 font-medium">Financial Breakdown</div>
-              <div className="mt-0.5 space-y-1 font-medium text-zinc-900 dark:text-zinc-100 tabular-nums">
-                <div className="font-bold text-sm">Total: {formatINR(invoice.total_amount)}</div>
-                <div className="text-[11px] text-zinc-500">
-                  Taxable: {formatINR(invoice.taxable_amount)}
                 </div>
-                {(invoice.cgst > 0 || invoice.sgst > 0 || invoice.igst > 0) && (
-                  <div className="text-[10.5px] text-zinc-400 font-mono">
-                    Tax: CGST {formatINR(invoice.cgst)} &bull; SGST {formatINR(invoice.sgst)} &bull; IGST {formatINR(invoice.igst)}
+                <p className="text-xs text-slate-300 mt-1">
+                  {assessment.recommendation === 'MANUAL_REVIEW' 
+                    ? 'Discrepancies, missing evidence, or unverified fields detected. Fail-closed policy requires authorized human sign-off before payment.'
+                    : assessment.recommendation === 'BLOCK'
+                    ? 'Critical hard safety gate triggered. Suspended registration, duplicate invoice, or critical identity conflict detected.'
+                    : 'Required claims reconciled with public evidence. Human sign-off required to finalize.'}
+                </p>
+                <p className="text-[11px] font-mono text-slate-400 mt-1">
+                  {assessment.score_explanation}
+                </p>
+
+                {/* Reason Codes */}
+                {assessment.reason_codes.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {assessment.reason_codes.map(rc => (
+                      <span key={rc} className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900/90 text-amber-300 border border-amber-800/50">
+                        {rc}
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>
             </div>
 
-            <div>
-              <div className="text-[11px] text-zinc-400 font-medium">Remittance Account</div>
-              <div className="mt-0.5 font-mono text-zinc-700 dark:text-zinc-300 text-[11px]">
-                {invoice.bank_account_masked || 'N/A'} (IFSC: {invoice.ifsc_code || 'N/A'})
+            <div className="text-right font-mono text-[11px] text-slate-400">
+              <div>Rule Engine v{assessment.ruleset_version}</div>
+              <div>Evidence: <strong className="text-slate-300">{assessment.evidence_completeness}</strong></div>
+            </div>
+          </div>
+
+          {/* Decision Support & Limitations Banner */}
+          <div className="mt-3 px-3 py-1.5 rounded bg-slate-900/60 border border-slate-800 text-[10px] text-slate-400 font-mono">
+            <strong>DECISION-SUPPORT NOTICE:</strong> Scores and exposure figures are uncalibrated deterministic heuristics for human analyst prioritization. They do not constitute formal tax assessments or guaranteed legal liabilities.
+          </div>
+
+          {/* Direct Rupee Financial Liability (CGST Sec 16(2)(c)) */}
+          {assessment.itc_exposure && (
+            <div className="mt-4 pt-4 border-t border-slate-800/80 bg-slate-950/60 rounded-lg p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+              <div>
+                <span className="text-[10px] font-mono uppercase text-slate-400 block tracking-wider">
+                  Estimated Potential Exposure &bull; CGST Sec 16(2)(c) &amp; Sec 74 (Decision-Support Projection)
+                </span>
+                <div className="text-white font-medium mt-0.5">
+                  Claimed GST: <strong className="text-cyan-300 font-mono">&#8377;{assessment.itc_exposure.tax_amount_claimed.toLocaleString('en-IN')}</strong> &bull; Estimated Potential Liability: <strong className="text-rose-400 font-mono">&#8377;{assessment.itc_exposure.total_financial_liability_inr.toLocaleString('en-IN')}</strong> (illustrative recovery + penalty/interest if contested)
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1 italic">
+                  &ldquo;{assessment.itc_exposure.cfo_advisory}&rdquo;
+                </p>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <span className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold uppercase ${
+                  assessment.itc_exposure.risk_tier === 'CRITICAL' ? 'bg-rose-950 text-rose-300 border border-rose-800' :
+                  assessment.itc_exposure.risk_tier === 'HIGH' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                  'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                }`}>
+                  ITC TIER: {assessment.itc_exposure.risk_tier}
+                </span>
               </div>
             </div>
+          )}
 
-            <div>
-              <div className="text-[11px] text-zinc-400 font-medium">Billing Address</div>
-              <div className="mt-0.5 text-zinc-600 dark:text-zinc-300 text-[11.5px] leading-relaxed">
-                {invoice.billing_address || 'Not specified on invoice document'}
+          {/* 5-Vector Forensic Topology Radar */}
+          {assessment.forensic_vectors && (
+            <div className="mt-4 pt-4 border-t border-slate-800/80">
+              <span className="text-[10px] font-mono uppercase text-slate-400 block tracking-wider mb-2">
+                5-Vector Forensic Risk Topology
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
+                <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+                  <span className="text-[9px] text-slate-400 block font-mono">1. ITC Clawback</span>
+                  <span className="font-mono font-bold text-cyan-400">{Math.round(assessment.forensic_vectors.itc_clawback_risk_index * 100)}%</span>
+                </div>
+                <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+                  <span className="text-[9px] text-slate-400 block font-mono">2. Shell Contagion</span>
+                  <span className="font-mono font-bold text-rose-400">{Math.round(assessment.forensic_vectors.director_shell_contagion_score * 100)}%</span>
+                </div>
+                <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+                  <span className="text-[9px] text-slate-400 block font-mono">3. Ghost Density</span>
+                  <span className="font-mono font-bold text-amber-400">{assessment.forensic_vectors.address_collocation_density} entities</span>
+                </div>
+                <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+                  <span className="text-[9px] text-slate-400 block font-mono">4. Premises Match</span>
+                  <span className="font-mono font-bold text-emerald-400">{Math.round(assessment.forensic_vectors.operational_grounding_score * 100)}%</span>
+                </div>
+                <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+                  <span className="text-[9px] text-slate-400 block font-mono">5. Pop-Up Velocity</span>
+                  <span className="font-mono font-bold text-purple-400">{Math.round(assessment.forensic_vectors.popup_velocity_factor * 100)}%</span>
+                </div>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+
+      {/* Grid: Invoice Claims vs Reconciled Evidence */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left: Invoice Raw Claims */}
+        <div className="bg-[#0f172a]/70 border border-slate-800 rounded-lg p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-300 font-mono">
+              1. Extracted Invoice Claims
+            </h2>
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="text-[11px] font-mono text-cyan-400 hover:underline flex items-center gap-1"
+            >
+              <Edit3 className="h-3 w-3" /> Edit
+            </button>
+          </div>
+          <div className="space-y-3 text-xs">
+            <div>
+              <span className="text-[11px] font-mono text-slate-500 block">Supplier Trade Name</span>
+              <span className="font-semibold text-white">{invoice.supplier_name}</span>
+            </div>
+            {invoice.legal_name && (
+              <div>
+                <span className="text-[11px] font-mono text-slate-500 block">Declared Legal Name</span>
+                <span className="font-mono text-slate-300">{invoice.legal_name}</span>
+              </div>
+            )}
+            <div>
+              <span className="text-[11px] font-mono text-slate-500 block">GSTIN</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-cyan-300">{invoice.gstin || 'Not provided'}</span>
+                {invoice.gstin_format_valid && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">
+                    CHECKSUM VALID
+                  </span>
+                )}
+              </div>
+            </div>
+            <div>
+              <span className="text-[11px] font-mono text-slate-500 block">Invoice Total &amp; Tax</span>
+              <span className="font-mono text-white">
+                &#8377;{invoice.total_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Taxable: &#8377;{invoice.taxable_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })})
+              </span>
+            </div>
+            <div>
+              <span className="text-[11px] font-mono text-slate-500 block">Tax Breakdown</span>
+              <span className="font-mono text-slate-300 text-[11px]">
+                CGST: &#8377;{invoice.cgst.toLocaleString('en-IN')} | SGST: &#8377;{invoice.sgst.toLocaleString('en-IN')} | IGST: &#8377;{invoice.igst.toLocaleString('en-IN')}
+              </span>
+            </div>
+            <div>
+              <span className="text-[11px] font-mono text-slate-500 block">Bank Account &amp; IFSC</span>
+              <span className="font-mono text-slate-300">
+                {invoice.bank_account_masked || 'N/A'} | IFSC: {invoice.ifsc_code || 'N/A'}
+              </span>
+            </div>
+            <div>
+              <span className="text-[11px] font-mono text-slate-500 block">Billing Address</span>
+              <span className="text-slate-300">{invoice.billing_address || 'Not specified'}</span>
             </div>
           </div>
         </div>
 
-        {/* Center/Right Columns: Reconciliations & Evidence */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Section 2: Reconciled Checks */}
-          <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-xl p-5 space-y-4 shadow-subtle">
-            <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800/80">
-              <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-                Deterministic Field Reconciliations
-              </span>
-              <span className="text-[11px] text-zinc-400 font-mono">
-                {assessment?.field_checks.length ?? 0} checkpoints evaluated
-              </span>
-            </div>
+        {/* Center & Right: Reconciled Checks & Provenance */}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="bg-[#0f172a]/70 border border-slate-800 rounded-lg p-5 space-y-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-300 font-mono border-b border-slate-800 pb-2">
+              2. Deterministic Field Reconciliations
+            </h2>
 
             {assessment && assessment.field_checks.length > 0 ? (
-              <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+              <div className="divide-y divide-slate-800/60">
                 {assessment.field_checks.map((chk) => (
-                  <div key={chk.check_id} className="py-3.5 first:pt-0 last:pb-0 space-y-2 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                        {chk.field_name}
-                      </span>
-                      <span
-                        className={`inline-flex items-center space-x-1 text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                  <div key={chk.check_id} className="py-3 first:pt-0 last:pb-0 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-200">{chk.field_name}</span>
+                      <div className="flex items-center gap-2">
+                        {chk.source_mode && (
+                          <span className="text-[9px] font-mono uppercase px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                            {chk.source_mode}
+                          </span>
+                        )}
+                        <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded font-semibold ${
                           chk.status === 'MATCH'
-                            ? 'text-emerald-800 bg-emerald-50 border-emerald-200 dark:text-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-800/60'
-                            : chk.status === 'POSSIBLE_MATCH' || chk.status === 'STALE_OR_UNCLEAR'
-                            ? 'text-amber-800 bg-amber-50 border-amber-200 dark:text-amber-300 dark:bg-amber-950/40 dark:border-amber-800/60'
-                            : chk.status === 'MISMATCH'
-                            ? 'text-rose-800 bg-rose-50 border-rose-200 dark:text-rose-300 dark:bg-rose-950/40 dark:border-rose-800/60'
-                            : 'text-slate-700 bg-slate-100 border-slate-200 dark:text-slate-300 dark:bg-slate-800/60 dark:border-slate-700'
-                        }`}
-                      >
-                        {chk.status === 'MATCH' && <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />}
-                        {(chk.status === 'POSSIBLE_MATCH' || chk.status === 'STALE_OR_UNCLEAR') && <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400" />}
-                        {chk.status === 'MISMATCH' && <XCircle className="h-3 w-3 text-rose-600 dark:text-rose-400" />}
-                        {(chk.status === 'NOT_FOUND' || chk.status === 'UNAVAILABLE' || chk.status === 'NOT_APPLICABLE') && <HelpCircle className="h-3 w-3 text-slate-500" />}
-                        <span>{chk.status.replace(/_/g, ' ')}</span>
-                      </span>
+                            ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                            : chk.status === 'POSSIBLE_MATCH'
+                            ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                            : chk.status === 'UNAVAILABLE'
+                            ? 'bg-slate-800 text-slate-300 border border-slate-700'
+                            : 'bg-rose-950 text-rose-400 border border-rose-800'
+                        }`}>
+                          {chk.status}
+                        </span>
+                      </div>
                     </div>
-
-                    <p className="text-zinc-600 dark:text-zinc-300 leading-relaxed text-[11.5px]">
+                    <p className="text-xs text-slate-300 leading-relaxed">
                       {chk.explanation}
                     </p>
-
-                    {(chk.invoice_value || chk.evidence_value) && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px]">
-                        {chk.invoice_value && (
-                          <div className="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800/70">
-                            <span className="text-[10px] text-zinc-400 font-semibold block uppercase">Invoice Value</span>
-                            <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{chk.invoice_value}</span>
-                          </div>
-                        )}
-                        {chk.evidence_value && (
-                          <div className="p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800/70">
-                            <span className="text-[10px] text-zinc-400 font-semibold block uppercase">Public Evidence Value</span>
-                            <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{chk.evidence_value}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
                     {chk.source_url && (
-                      <div className="pt-0.5">
+                      <div className="pt-1">
                         <a
                           href={chk.source_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center space-x-1 text-[11px] text-teal-700 dark:text-teal-400 hover:underline font-medium"
+                          className="inline-flex items-center gap-1 text-[11px] font-mono text-cyan-400 hover:underline"
                         >
-                          <span>Evidence Source Citation</span>
+                          <span>Evidence Source Link</span>
                           <ExternalLink className="h-3 w-3" />
                         </a>
                       </div>
@@ -437,51 +483,48 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
                 ))}
               </div>
             ) : (
-              <div className="py-6 text-center text-xs text-zinc-400">
-                No checkpoints generated yet. Run the TinyFish investigation above.
+              <div className="text-xs text-slate-400 font-mono py-4">
+                No reconciliation checks run yet. Click &apos;Run Investigation&apos; above.
               </div>
             )}
           </div>
 
-          {/* Section 3: Evidence Provenance Log */}
+          {/* Discovered Evidence Dossier View */}
           {evidence_items.length > 0 && (
-            <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-xl p-5 space-y-4 shadow-subtle">
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800/80 text-xs">
-                <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                  Raw Evidence Provenance Trail ({evidence_items.length})
-                </span>
-                <span className="text-[11px] text-zinc-400 font-mono">Public Web Citations</span>
-              </div>
-
+            <div className="bg-[#0f172a]/70 border border-slate-800 rounded-lg p-5 space-y-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-300 font-mono border-b border-slate-800 pb-2">
+                3. Evidence Dossier &amp; Provenance Trail
+              </h2>
               <div className="space-y-3">
-                {evidence_items.map((ev) => (
-                  <div
-                    key={ev.evidence_id}
-                    className="p-3.5 rounded-lg border border-zinc-200/70 dark:border-zinc-800/70 bg-zinc-50/50 dark:bg-zinc-900/30 text-xs space-y-1.5"
-                  >
+                {evidence_items.map(ev => (
+                  <div key={ev.evidence_id} className="p-3 bg-[#0b0f19] border border-slate-800 rounded text-xs space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-zinc-900 dark:text-zinc-100">
-                        {ev.source_name}
-                      </span>
-                      <span className="text-[10px] text-zinc-400 font-mono">
-                        {ev.retrieved_at}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-cyan-300">{ev.source_name}</span>
+                        {ev.is_fallback ? (
+                          <span className="text-[9px] font-mono uppercase px-1.5 py-0.2 rounded bg-amber-950 text-amber-400 border border-amber-800">
+                            Simulated Fallback
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-mono uppercase px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                            {ev.source_mode || 'SIMULATED'}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-500">{ev.retrieved_at}</span>
                     </div>
-
-                    <p className="font-mono text-[11px] text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-950 p-2.5 rounded-md border border-zinc-200/60 dark:border-zinc-900 leading-relaxed whitespace-pre-wrap">
+                    {ev.fallback_reason && (
+                      <p className="text-[11px] text-amber-300 font-mono">
+                        Fallback notice: {ev.fallback_reason}
+                      </p>
+                    )}
+                    <p className="text-slate-300 font-mono text-[11px] bg-slate-950 p-2 rounded border border-slate-900 leading-relaxed">
                       {ev.raw_excerpt}
                     </p>
-
-                    {ev.source_url && (
-                      <a
-                        href={ev.source_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center space-x-1 text-[11px] text-teal-700 dark:text-teal-400 hover:underline pt-0.5 truncate max-w-full font-medium"
-                      >
-                        <span className="truncate">{ev.source_url}</span>
-                        <ExternalLink className="h-3 w-3 shrink-0" />
-                      </a>
+                    {ev.match_rationale && (
+                      <p className="text-[11px] text-slate-400 italic">
+                        Rationale: {ev.match_rationale}
+                      </p>
                     )}
                   </div>
                 ))}
@@ -491,101 +534,218 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-      {/* Section 4: Human Reviewer Decision & Sign-Off Card */}
-      <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-xl p-5 sm:p-6 space-y-4 shadow-subtle">
-        <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800/80">
-          <div className="flex items-center space-x-2">
-            <Lock className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-            <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-              Human Reviewer Authorization &amp; Cryptographic Audit Seal
-            </span>
+      {/* Reviewer Activity History Timeline */}
+      {review_history && review_history.length > 0 && (
+        <div className="bg-[#0f172a]/70 border border-slate-800 rounded-lg p-5 space-y-3">
+          <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+            <History className="h-4 w-4 text-cyan-400" />
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-300 font-mono">
+              Reviewer Activity History ({review_history.length})
+            </h2>
           </div>
-          <span className="text-[11px] text-zinc-400 font-medium">
-            Mandatory Human Dual-Custody
-          </span>
+          <div className="space-y-2">
+            {review_history.map(rh => (
+              <div key={rh.action_id} className="p-3 bg-[#0b0f19] border border-slate-800 rounded text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="font-mono text-emerald-400 font-bold uppercase mr-2">[{rh.action}]</span>
+                  <span className="text-slate-200">{rh.rationale}</span>
+                </div>
+                <div className="text-[11px] font-mono text-slate-400 flex items-center gap-2">
+                  <span>{rh.reviewer_id}</span>
+                  <span>&bull;</span>
+                  <span>{rh.recorded_at}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Reviewer Action / Sign-Off Box */}
+      <div className="bg-[#0f172a]/90 border border-slate-700 rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <Lock className="h-4 w-4 text-cyan-400" />
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-200 font-mono">
+              4. Human Reviewer Decision &amp; Audit Seal
+            </h2>
+          </div>
+          {caseData.audit_hash_sha256 && (
+            <span className="text-[11px] font-mono text-slate-400">
+              SHA-256: <code className="text-cyan-300">{caseData.audit_hash_sha256.substring(0, 16)}...</code>
+            </span>
+          )}
         </div>
 
         {review ? (
-          <div className="p-4 rounded-xl border border-emerald-300 dark:border-emerald-800/80 bg-emerald-50/40 dark:bg-emerald-950/20 text-xs space-y-2.5">
+          <div className="p-4 bg-slate-900/80 border border-slate-700/80 rounded-lg text-xs space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5">
-                <Check className="h-4 w-4 text-emerald-600" />
-                <span>Decision Recorded: {review.action.replace(/_/g, ' ')}</span>
+              <span className="font-mono text-emerald-400 font-bold uppercase">
+                &check; Decision Recorded: {review.action}
               </span>
-              <span className="text-[11px] text-zinc-400 font-mono">{review.recorded_at}</span>
+              <span className="font-mono text-slate-500">{review.recorded_at}</span>
             </div>
-            <div className="text-zinc-700 dark:text-zinc-300">
-              <span className="text-zinc-400">Authorized Reviewer:</span> <strong className="font-mono">{review.reviewer_id}</strong>
+            <div>
+              <span className="text-slate-400 font-mono text-[11px]">Reviewer: </span>
+              <span className="text-white font-medium">{review.reviewer_id} ({review.reviewer_role || 'ap_analyst'})</span>
             </div>
-            <div className="text-zinc-800 dark:text-zinc-200 pt-2 border-t border-emerald-200 dark:border-emerald-900/60">
-              <span className="text-zinc-400 block text-[11px] font-semibold">Audit Rationale:</span>
-              <p className="mt-1 leading-relaxed">{review.rationale}</p>
+            <div>
+              <span className="text-slate-400 font-mono text-[11px]">Audit Rationale: </span>
+              <p className="text-slate-200 mt-0.5">{review.rationale}</p>
             </div>
           </div>
         ) : (
           <form onSubmit={handleReviewSubmit} className="space-y-4 text-xs">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-zinc-700 dark:text-zinc-300 mb-1 font-medium">
-                  Reviewer Identifier <span className="text-rose-500">*</span>
+                <label className="block text-slate-400 font-mono text-[11px] mb-1">
+                  Reviewer Identity
                 </label>
                 <input
                   type="text"
                   required
                   value={reviewerId}
                   onChange={(e) => setReviewerId(e.target.value)}
-                  className="w-full px-3 py-2 font-mono bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-teal-500 font-semibold"
+                  className="w-full bg-[#0b0f19] border border-slate-700 rounded px-3 py-2 text-white font-mono focus:outline-none focus:border-cyan-500"
                 />
               </div>
 
               <div>
-                <label className="block text-zinc-700 dark:text-zinc-300 mb-1 font-medium">
-                  Sign-Off Action <span className="text-rose-500">*</span>
+                <label className="block text-slate-400 font-mono text-[11px] mb-1">
+                  Review Action
                 </label>
                 <select
                   value={reviewAction}
                   onChange={(e) => setReviewAction(e.target.value as ReviewActionType)}
-                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-teal-500 font-semibold cursor-pointer"
+                  className="w-full bg-[#0b0f19] border border-slate-700 rounded px-3 py-2 text-white font-mono focus:outline-none focus:border-cyan-500"
                 >
                   <option value="APPROVE">APPROVE (Clean Pass)</option>
                   <option value="APPROVE_WITH_EXCEPTION">APPROVE_WITH_EXCEPTION (Documented Override)</option>
                   <option value="REQUEST_DOCUMENTS">REQUEST_DOCUMENTS (Hold for Vendor)</option>
                   <option value="ESCALATE">ESCALATE (To AP Manager)</option>
-                  <option value="REJECT">REJECT (Halt Payment)</option>
+                  <option value="REJECT">REJECT (Block Payment)</option>
                 </select>
               </div>
             </div>
 
             <div>
-              <label className="block text-zinc-700 dark:text-zinc-300 mb-1 font-medium">
-                Audit Rationale &amp; Exception Documentation <span className="text-rose-500">*</span>
+              <label className="block text-slate-400 font-mono text-[11px] mb-1">
+                Mandatory Review Rationale (Saved to Tamper-Evident Chained Audit Trail) *
               </label>
               <textarea
                 required
-                rows={3}
-                placeholder="Document your verification findings and justification for this sign-off decision..."
+                rows={2}
+                placeholder="State verified trade-name alias, cancelled cheque verification, or reason for action..."
                 value={rationale}
                 onChange={(e) => setRationale(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-teal-500 font-sans text-xs leading-relaxed"
+                className="w-full bg-[#0b0f19] border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
               />
             </div>
 
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-[11px] text-zinc-400">
-                Action will be sealed with a SHA-256 cryptographic digest.
-              </span>
+            <div className="flex justify-end">
               <button
                 type="submit"
-                disabled={reviewing || rationale.trim().length < 5}
-                className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-lg text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-500 transition-all duration-200 shadow-sm hover:shadow-emerald-500/20 active:scale-95 disabled:opacity-50"
+                disabled={reviewing}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded text-xs transition disabled:opacity-50"
               >
-                <Lock className="h-3.5 w-3.5" />
-                <span>{reviewing ? 'Sealing Case...' : 'Authorize & Seal Case'}</span>
+                {reviewing ? 'Sealing Audit Record...' : 'Record Decision & Seal Case'}
               </button>
             </div>
           </form>
         )}
       </div>
+
+      {/* Modal: Correct Extracted Invoice Claims */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-[#0f172a] border border-slate-700 rounded-xl max-w-lg w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-bold text-white font-mono flex items-center gap-2">
+                <Edit3 className="h-4 w-4 text-cyan-400" />
+                <span>Correct Invoice Claims &amp; Rerun Assessment</span>
+              </h3>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="text-slate-400 hover:text-white text-xs"
+              >
+                &times; Close
+              </button>
+            </div>
+
+            <form onSubmit={handleCorrectionSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-400 font-mono text-[11px] mb-1">Supplier Trade Name</label>
+                <input
+                  type="text"
+                  value={corrSupplier}
+                  onChange={(e) => setCorrSupplier(e.target.value)}
+                  className="w-full bg-[#0b0f19] border border-slate-700 rounded px-3 py-1.5 text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-mono text-[11px] mb-1">Supplier GSTIN</label>
+                <input
+                  type="text"
+                  value={corrGstin}
+                  onChange={(e) => setCorrGstin(e.target.value.toUpperCase())}
+                  className="w-full bg-[#0b0f19] border border-slate-700 rounded px-3 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-mono text-[11px] mb-1">Invoice Number</label>
+                  <input
+                    type="text"
+                    value={corrInvNumber}
+                    onChange={(e) => setCorrInvNumber(e.target.value)}
+                    className="w-full bg-[#0b0f19] border border-slate-700 rounded px-3 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-mono text-[11px] mb-1">Total Amount (&#8377;)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={corrTotalAmount}
+                    onChange={(e) => setCorrTotalAmount(e.target.value)}
+                    className="w-full bg-[#0b0f19] border border-slate-700 rounded px-3 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-mono text-[11px] mb-1">Correction Rationale / Notes</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Corrected OCR typo in GSTIN character 14"
+                  value={corrNotes}
+                  onChange={(e) => setCorrNotes(e.target.value)}
+                  className="w-full bg-[#0b0f19] border border-slate-700 rounded px-3 py-1.5 text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={correcting}
+                  className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold rounded transition disabled:opacity-50"
+                >
+                  {correcting ? 'Saving & Reassessing...' : 'Apply & Rerun Assessment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -11,6 +11,8 @@ def reconcile_invoice_components(
     igst: float,
     total_amount: float,
     line_items: Optional[List[LineItem]] = None,
+    round_off: float = 0.0,
+    discount_amount: float = 0.0,
     tolerance: float = 1.0
 ) -> Dict[str, Any]:
     """
@@ -19,7 +21,7 @@ def reconcile_invoice_components(
     Verifications:
     1. Line items sum vs taxable amount / total amount
     2. Individual line item math: quantity * unit_price == total
-    3. Tax component reconciliation: taxable_amount + cgst + sgst + igst == total_amount
+    3. Tax component reconciliation: taxable_amount + cgst + sgst + igst + round_off - discount_amount == total_amount
     4. Intra-state vs Inter-state consistency (CGST == SGST if intra-state; IGST only if inter-state)
     5. Effective GST rate alignment with statutory Indian tax slabs (0%, 5%, 12%, 18%, 28%)
     """
@@ -55,12 +57,12 @@ def reconcile_invoice_components(
 
     # 2. Tax breakdown reconciliation
     total_tax = round(cgst + sgst + igst, 2)
-    calculated_total = round(taxable_amount + total_tax, 2)
+    calculated_total = round(taxable_amount + total_tax + round_off - discount_amount, 2)
     total_diff = abs(calculated_total - total_amount)
     
     if total_diff > tolerance:
         discrepancies.append(
-            f"Tax breakdown sum ({taxable_amount:.2f} + {cgst:.2f} + {sgst:.2f} + {igst:.2f} = "
+            f"Tax breakdown sum ({taxable_amount:.2f} + {cgst:.2f} + {sgst:.2f} + {igst:.2f} + round_off {round_off:.2f} - discount {discount_amount:.2f} = "
             f"{calculated_total:.2f}) does not match declared total amount ({total_amount:.2f}) "
             f"(diff: {total_diff:.2f})"
         )
@@ -109,6 +111,8 @@ def reconcile_invoice_components(
         "cgst": cgst,
         "sgst": sgst,
         "igst": igst,
+        "round_off": round_off,
+        "discount_amount": discount_amount,
         "total_tax": total_tax,
         "calculated_total": calculated_total,
         "declared_total": total_amount,
@@ -130,6 +134,8 @@ def validate_invoice_arithmetic(
     igst: float,
     total_amount: float,
     line_items: Optional[List[LineItem]] = None,
+    round_off: float = 0.0,
+    discount_amount: float = 0.0,
     tolerance: float = 1.0
 ) -> Tuple[bool, str]:
     """
@@ -143,6 +149,8 @@ def validate_invoice_arithmetic(
         igst=igst,
         total_amount=total_amount,
         line_items=line_items,
+        round_off=round_off,
+        discount_amount=discount_amount,
         tolerance=tolerance
     )
     return reconciliation["is_valid"], reconciliation["reason"]

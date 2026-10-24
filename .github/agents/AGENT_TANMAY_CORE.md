@@ -24,38 +24,51 @@ Your domain covers:
 ```
 backend/app/
 ├── api/
-│   ├── cases.py          # Case creation, retrieval, and state transitions
-│   ├── investigate.py    # Trigger TinyFish web investigation
-│   └── review.py         # Record human reviewer decisions with rationale
+│   ├── cases.py                  # Case creation, retrieval, and state transitions
+│   ├── investigate.py            # Triggers 4-Hop TinyFish Multi-Entity Traversal
+│   ├── review.py                 # Records human reviewer decisions with mandatory rationale
+│   └── reports.py                # Exports Markdown audit report with ₹ liability breakdown
 ├── services/
-│   ├── tinyfish/client.py        # Verified TinyFish API / SDK client with fallback simulator
+│   ├── tinyfish/
+│   │   ├── orchestrator.py       # 4-Hop Autonomous Browser Orchestrator (GST, DIN, Geo, NCLT)
+│   │   └── client.py             # Official TinyFish REST / SDK client
+│   ├── rules/
+│   │   ├── forensic_engine.py    # 5-Vector Forensic Risk Topology & Entity Knowledge Graph
+│   │   ├── itc_calculator.py     # Direct ₹ exposure under CGST Sec 16(2)(c) & Sec 74 (100% penalty)
+│   │   └── engine.py             # Baseline deterministic rule engine
 │   ├── reconciler/evidence_reconciler.py  # Field-by-field claim vs evidence matching
-│   ├── rules/engine.py           # 3-tier risk model: hard gates, risk scoring, reason codes
-│   └── audit/trail.py            # SHA-256 evidence hashing, audit events, PDF/markdown export
-└── schemas/                      # Canonical Pydantic contracts
+│   └── audit/trail.py            # SHA-256 tamper-evident integrity digest generator
+└── schemas/
+    ├── forensic_graph.py         # ForensicVectorScores, ITCExposureDetails, EntityGraph
+    └── assessment.py             # RiskAssessment with 5-vector topology payload
 ```
 
 ---
 
 ## 📡 API Contract Guidelines
 - Case Status Flow: `SUBMITTED` ➔ `PARSED` ➔ `INVESTIGATING` ➔ `READY_FOR_REVIEW` ➔ `RESOLVED`.
-- Hard Gates (Auto-Review/Block regardless of score):
-  - `GSTIN_FORMAT_INVALID`: Review/Block
-  - `GST_STATUS_INACTIVE_CONFIRMED`: Block
-  - `LEGAL_NAME_MISMATCH`: Review (requires alias clarification)
-  - `EVIDENCE_INSUFFICIENT`: Review
-  - `BANK_OWNERSHIP_UNVERIFIED`: Review (IFSC alone cannot verify ownership)
+- Hard Safety Gates:
+  - `DIRECTOR_SHELL_CONTAGION_CRITICAL`: Promoter has > 35% struck-off firms (Sec 248) ➔ **BLOCK**
+  - `GHOST_HUB_ADDRESS_DETECTED`: > 15 independent entities collocated at micro-suite ➔ **BLOCK**
+  - `ACTIVE_INSOLVENCY_PROCEEDING`: Active NCLT / IBC petition ➔ **BLOCK**
+  - `GST_STATUS_INACTIVE_CONFIRMED`: Inactive status on statutory portal ➔ **BLOCK**
+  - `LEGAL_NAME_MISMATCH`: Trade name differs from registered entity ➔ **MANUAL_REVIEW**
+  - `BANK_OWNERSHIP_UNVERIFIED`: Branch valid, beneficiary ownership unverified ➔ **MANUAL_REVIEW**
 - SHA-256 Hashing: Hash canonical JSON of `(case_id, invoice_claim, evidence_items, risk_assessment, timestamp)`.
 
 ---
 
 ## 🧪 Testing Requirements
 Before submitting a PR:
-- Run `pytest backend/tests/test_rules_engine.py`
-- Run `pytest backend/tests/test_tinyfish_service.py`
-- Run `pytest backend/tests/test_cases_api.py`
+- Run `backend/venv/bin/pytest backend/tests/test_forensic_engine.py -v`
+- Run `backend/venv/bin/pytest backend/tests/test_itc_calculator.py -v`
+- Run `backend/venv/bin/pytest backend/tests/test_multihop_orchestrator.py -v`
+- Run `backend/venv/bin/pytest backend/tests/test_cases_api.py -v`
 
 ## 🌿 Git & PR Workflow
-- Branch naming: `feat/core-<short-description>` (e.g., `feat/core-tinyfish-orchestrator`)
+- Branch naming: `feat/core-<short-description>` (e.g., `feat/core-forensic-5vectors`)
 - PR Target: `main`
 - Never push directly to `main`.
+
+
+

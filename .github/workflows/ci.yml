@@ -22,6 +22,7 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
 
       - name: Install Dependencies
         run: |
@@ -30,7 +31,7 @@ jobs:
 
       - name: Run Pytest Suite
         run: |
-          pytest -v --maxfail=1
+          PYTHONPATH=..:. pytest -v --maxfail=1
 
   frontend-build:
     name: Frontend Typecheck & Build
@@ -55,7 +56,10 @@ jobs:
           cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install Dependencies
-        run: pnpm install --frozen-lockfile || pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Check TypeScript Types
         run: pnpm tsc --noEmit
+
+      - name: Build Next.js Production App
+        run: pnpm build

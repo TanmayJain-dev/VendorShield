@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
-from datetime import datetime
-from .enums import CheckStatus
+from datetime import datetime, timezone
+from .enums import CheckStatus, SourceMode
 
 class EvidenceItem(BaseModel):
     evidence_id: str
@@ -9,10 +9,14 @@ class EvidenceItem(BaseModel):
     source_name: str
     claim_supported: str
     source_type: str = "PUBLIC_WEB"
-    retrieved_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+    source_mode: SourceMode = SourceMode.SIMULATED
+    is_fallback: bool = False
+    fallback_reason: Optional[str] = None
+    retrieved_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     raw_excerpt: str
     facts: Dict[str, Any] = Field(default_factory=dict)
     is_authoritative: bool = False
+    match_rationale: Optional[str] = None
 
 class FieldCheckResult(BaseModel):
     check_id: str
@@ -24,3 +28,5 @@ class FieldCheckResult(BaseModel):
     explanation: str
     evidence_id: Optional[str] = None
     source_url: Optional[str] = None
+    source_mode: SourceMode = SourceMode.SIMULATED
+    is_fallback: bool = False

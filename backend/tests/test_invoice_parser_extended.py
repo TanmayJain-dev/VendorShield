@@ -1,5 +1,9 @@
 import pytest
-from backend.app.services.parser.invoice_parser import parse_invoice_text, extract_text_from_pdf_bytes
+from backend.app.services.parser.invoice_parser import (
+    parse_invoice_text,
+    parse_invoice_pdf,
+    extract_text_from_pdf_bytes
+)
 from backend.app.schemas.enums import ExtractionStatus
 
 def test_parse_invoice_with_explicit_cgst_sgst():
@@ -61,6 +65,9 @@ def test_parse_invoice_without_tax_breakdown_marks_inferred():
     assert claim.extraction_metadata["taxable_amount"].status == ExtractionStatus.INFERRED
     assert claim.extraction_metadata["cgst"].status == ExtractionStatus.INFERRED
     assert any("not an extracted fact" in m.notes.lower() for m in claim.extraction_metadata.values() if m.notes)
+    # INVARIANT: Arithmetic must never be marked valid when tax was inferred
+    assert claim.arithmetic_valid is False
+    assert "ARITHMETIC_UNVERIFIED" in claim.arithmetic_notes
 
 def test_extract_text_pdf_page_limit_enforced():
     # Ensure PDF parser rejects exceeding max page limits cleanly
@@ -68,3 +75,21 @@ def test_extract_text_pdf_page_limit_enforced():
     text, is_scanned, ocr_msg, errors = extract_text_from_pdf_bytes(fake_doc)
     # Returns structured errors, does not crash or inject into text
     assert isinstance(errors, list)
+
+def test_corrupted_pdf_returns_structured_error_and_clean_supplier():
+    corrupted_bytes = b"CORRUPTED_NOT_A_PDF"
+    claim = parse_invoice_pdf(corrupted_bytes, default_supplier="Default Fallback Vendor")
+    # Must preserve supplier name and not inject error text into vendor name
+    assert claim.supplier_name == "Default Fallback Vendor"
+    assert claim.arithmetic_valid is False
+    assert len(claim.parsing_errors) > 0
+    assert any("missing %PDF-" in err for err in claim.parsing_errors)
+    # Raw text must not contain corrupted non-pdf junk
+    assert claim.raw_text == ""
+
+def test_oversized_pdf_rejected_before_memory():
+    # Construct a simulated >15MB payload
+    oversized = b"%PDF-" + b"A" * (15 * 1024 * 1024 + 100)
+    text, is_scanned, ocr_msg, errors = extract_text_from_pdf_bytes(oversized)
+    assert len(errors) > 0
+    assert any("exceeds maximum file size" in err for err in errors)

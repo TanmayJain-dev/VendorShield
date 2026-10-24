@@ -151,6 +151,15 @@ def extract_text_from_pdf_bytes(pdf_bytes: bytes, return_details: bool = False):
     is_scanned_image = False
     ocr_status_message: Optional[str] = None
 
+    # Enforce size limit and magic byte checks before parsing into memory
+    if len(pdf_bytes) > 15 * 1024 * 1024:
+        errors.append(f"PDF exceeds maximum file size limit of 15MB (detected {len(pdf_bytes)} bytes)")
+        return ExtractedPdfText("Extraction error: PDF exceeds maximum file size limit of 15MB", False, None, errors)
+
+    if not pdf_bytes.startswith(b"%PDF-"):
+        errors.append("Invalid file header: missing %PDF- magic bytes specification")
+        return ExtractedPdfText("Extraction error: Invalid file header: missing %PDF- magic bytes specification", False, None, errors)
+
     try:
         try:
             import pymupdf as fitz
@@ -300,6 +309,12 @@ def parse_invoice_text(
     extraction_meta: Dict[str, FieldExtractionMeta] = {}
     tax_breakdown: List[TaxBreakdownItem] = []
 
+    # If raw text contains an extraction error message, record as error and clear text
+    if text.startswith("Extraction error:") or text.startswith("[PARSING_ERROR:"):
+        if text not in errors:
+            errors.append(text)
+        text = ""
+
     file_sha256 = None
     if file_bytes:
         file_sha256 = hashlib.sha256(file_bytes).hexdigest()
@@ -383,7 +398,7 @@ def parse_invoice_text(
     elif default_supplier == "Unknown Supplier" or not default_supplier:
         lines = [line.strip() for line in text.split("\n") if line.strip()]
         for line in lines[:5]:
-            if not any(k in line.lower() for k in ["tax invoice", "invoice", "gstin", "original", "bill"]):
+            if not any(k in line.lower() for k in ["tax invoice", "invoice", "gstin", "original", "bill", "extraction error", "error"]):
                 if 3 < len(line) < 50:
                     supplier_name = line
                     break
@@ -547,12 +562,14 @@ def parse_invoice_text(
             discount_amount = 0.0
 
     # 8. Handling Un-extracted Tax: DO NOT SILENTLY ASSUME 18% GST AS GROUND TRUTH
+    tax_inferred = False
     if not (cgst_extracted or sgst_extracted or igst_extracted):
         if taxable_extracted and total_amount > taxable_amount:
             diff_tax = round(total_amount - taxable_amount - round_off + discount_amount, 2)
             warnings.append(
                 f"Tax breakdown is not explicitly detailed in invoice text. Residual tax amount: ₹{diff_tax:.2f}."
             )
+            tax_inferred = True
             extraction_meta["cgst"] = FieldExtractionMeta(
                 status=ExtractionStatus.UNAVAILABLE,
                 confidence=0.0,
@@ -574,6 +591,7 @@ def parse_invoice_text(
             cgst = round(inferred_tax / 2, 2)
             sgst = cgst
             igst = 0.0
+            tax_inferred = True
             warnings.append(
                 "Neither taxable amount nor tax breakdown was found in document. "
                 "Tax figures are rough 18% estimations for guidance only; human confirmation required."
@@ -613,6 +631,19 @@ def parse_invoice_text(
         round_off=round_off,
         discount_amount=discount_amount
     )
+
+    # Invariant: Never mark arithmetic valid when tax or taxable amounts were inferred or unstated
+    if tax_inferred or any(m.status == ExtractionStatus.INFERRED for m in extraction_meta.values()):
+        arith_valid = False
+        arith_notes = (
+            "ARITHMETIC_UNVERIFIED: Tax breakdown or taxable amount was inferred rather than extracted from document text; "
+            "arithmetic cannot be marked valid without explicit source data."
+        )
+
+    if len(errors) > 0 or not text.strip():
+        arith_valid = False
+        if not arith_notes.startswith("ARITHMETIC_UNVERIFIED"):
+            arith_notes = "ARITHMETIC_UNVERIFIED: Parsing errors present or empty document text."
 
     return InvoiceClaim(
         invoice_number=invoice_number,
@@ -667,15 +698,16 @@ def parse_invoice_pdf(pdf_bytes: bytes, default_supplier: str = "Unknown Supplie
     pdf_tables = extract_tables_from_pdf(pdf_bytes)
     if pdf_tables:
         claim.line_items = pdf_tables
-        claim.arithmetic_valid, claim.arithmetic_notes = validate_invoice_arithmetic(
-            taxable_amount=claim.taxable_amount,
-            cgst=claim.cgst,
-            sgst=claim.sgst,
-            igst=claim.igst,
-            total_amount=claim.total_amount,
-            line_items=claim.line_items,
-            round_off=claim.round_off,
-            discount_amount=claim.discount_amount
-        )
+        if not any(m.status == ExtractionStatus.INFERRED for m in claim.extraction_metadata.values()):
+            claim.arithmetic_valid, claim.arithmetic_notes = validate_invoice_arithmetic(
+                taxable_amount=claim.taxable_amount,
+                cgst=claim.cgst,
+                sgst=claim.sgst,
+                igst=claim.igst,
+                total_amount=claim.total_amount,
+                line_items=claim.line_items,
+                round_off=claim.round_off,
+                discount_amount=claim.discount_amount
+            )
         
     return claim

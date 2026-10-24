@@ -6,13 +6,21 @@ from ...schemas.case import Case
 
 class AuditTrailService:
     """
-    Cryptographically chained audit trail and report generation service.
-    Generates deterministic SHA-256 digests over case snapshots and links
-    append-only audit events in a tamper-evident hash chain.
+    Cryptographic snapshot verification and audit report generation service.
+    
+    Integrity Architecture:
+    1. Computes a deterministic SHA-256 digest over the canonical sorted JSON
+       representation of the case snapshot (excluding the digest field itself).
+    2. Serves as a point-in-time tamper-evident snapshot integrity check to verify
+       that records match their state when finalized.
+    3. Storage Scope: In this local deployment, audit events and digests are persisted
+       in the local SQLite/PostgreSQL database. It is not an immutable distributed ledger.
+    4. Clearly delineates authoritative live registry evidence from simulated demo fixtures.
     """
     def compute_case_hash(self, case: Case) -> str:
         """
         Computes SHA-256 over canonical sorted JSON representation of the case payload.
+        Avoids circular hashing by computing only over content fields.
         """
         payload = {
             "case_id": case.case_id,
@@ -90,13 +98,13 @@ class AuditTrailService:
 
             if assess.itc_exposure:
                 itc = assess.itc_exposure
-                md.append("\n### 2.2 Direct Rupee Financial Exposure (CGST Sec 16(2)(c) & Sec 74)")
+                md.append("\n### 2.2 Direct Rupee Financial Exposure (CGST Sec 16(2)(c) & Sec 74 Decision-Support Estimate)")
                 md.append(f"- **Claimed GST Component:** ₹{itc.tax_amount_claimed:,.2f}")
-                md.append(f"- **Statutory 100% Penalty:** ₹{itc.statutory_penalty_inr:,.2f}")
-                md.append(f"- **Estimated 18% p.a. Interest:** ₹{itc.estimated_interest_inr:,.2f}")
-                md.append(f"- **Total Financial Liability:** **₹{itc.total_financial_liability_inr:,.2f}**")
+                md.append(f"- **Illustrative Statutory Penalty (Sec 74):** ₹{itc.statutory_penalty_inr:,.2f}")
+                md.append(f"- **Estimated Delayed Tax Interest (Sec 50 @ 18% p.a.):** ₹{itc.estimated_interest_inr:,.2f}")
+                md.append(f"- **Total Estimated Exposure:** **₹{itc.total_financial_liability_inr:,.2f}**")
                 md.append(f"- **Risk Classification:** `{itc.risk_tier}`")
-                md.append(f"- **CFO Advisory:** *\"{itc.cfo_advisory}\"*")
+                md.append(f"- **CFO Operational Advisory:** *\"{itc.cfo_advisory}\"*")
 
             if assess.entity_graph:
                 eg = assess.entity_graph
@@ -113,7 +121,7 @@ class AuditTrailService:
 
         md.append("## 3. Discovered Evidence Provenance Trail")
         for ev in case.evidence_items:
-            fallback_label = " [SIMULATED FALLBACK]" if ev.is_fallback else f" [{ev.source_mode.value}]"
+            fallback_label = " [DEMO FIXTURE]" if ev.is_fallback else f" [{ev.source_mode.value}]"
             md.append(f"### Source: [{ev.source_name}]({ev.source_url}){fallback_label}")
             md.append(f"- **Claim Supported:** {ev.claim_supported}")
             md.append(f"- **Source Type:** `{ev.source_type}` | **Authoritative:** {'YES' if ev.is_authoritative else 'NO'}")

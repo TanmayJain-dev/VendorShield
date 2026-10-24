@@ -24,9 +24,13 @@ app = FastAPI(
 )
 
 # CORS Middleware: Explicit trusted origins from configuration (no wildcard with credentials)
+safe_cors_origins = [o for o in settings.CORS_ORIGINS if o != "*"]
+if not safe_cors_origins:
+    safe_cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=safe_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -59,4 +63,4 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host=settings.HOST, port=settings.PORT, reload=True)
+    uvicorn.run("backend.app.main:app", host=settings.HOST, port=settings.PORT, reload=True)

@@ -3,7 +3,7 @@ from app.services.rules.forensic_engine import ForensicRiskEngine
 from app.schemas.invoice import InvoiceClaim
 from app.schemas.evidence import FieldCheckResult, EvidenceItem
 from app.schemas.forensic_graph import DirectorProfile, AddressClusterProfile
-from app.schemas.enums import RecommendationOutcome, CheckStatus
+from app.schemas.enums import RecommendationOutcome, CheckStatus, SourceMode
 
 def test_forensic_engine_apex_courier():
     engine = ForensicRiskEngine()
@@ -123,3 +123,66 @@ def test_forensic_engine_specter_shell_mill_blocks():
     assert assessment.itc_exposure.risk_tier == "CRITICAL"
     assert "DO NOT RELEASE PAYMENT" in assessment.itc_exposure.cfo_advisory
     assert assessment.entity_graph.total_flagged_edges >= 2
+
+def test_forensic_engine_incomplete_evidence_fails_closed():
+    """Missing or unavailable evidence must fail closed to MANUAL_REVIEW, never PASS."""
+    engine = ForensicRiskEngine()
+    invoice = InvoiceClaim(
+        invoice_number="INV-2026-9999",
+        supplier_name="Clean Looking Vendor",
+        gstin="07AAAAA0000A1Z5",
+        taxable_amount=10000.0,
+        cgst=900.0,
+        sgst=900.0,
+        igst=0.0,
+        total_amount=11800.0,
+        gstin_format_valid=True,
+        arithmetic_valid=True
+    )
+    directors = [
+        DirectorProfile(din="01111111", name="Clean Director", associated_companies_count=1, struck_off_companies_count=0)
+    ]
+    address_cluster = AddressClusterProfile(
+        raw_address="Clean Warehouse",
+        collocated_gstins_count=1,
+        premises_type="COMMERCIAL_HUB",
+        is_ghost_hub=False
+    )
+    # Check is UNAVAILABLE because live registry call timed out
+    field_checks = [
+        FieldCheckResult(
+            check_id="chk_gst",
+            field_name="GST Registration Status",
+            status=CheckStatus.UNAVAILABLE,
+            reason_code="GST_STATUS_UNAVAILABLE",
+            explanation="Registry service timed out"
+        )
+    ]
+    unavailable_evidence = [
+        EvidenceItem(
+            evidence_id="ev_unavailable",
+            source_url="https://service.gst.gov.in",
+            source_name="GSTN Statutory Registry",
+            claim_supported="Status",
+            source_type="GOVERNMENT_REGISTRY",
+            source_mode=SourceMode.UNAVAILABLE,
+            raw_excerpt="Live lookup timed out",
+            facts={"status": "UNAVAILABLE"},
+            is_authoritative=False
+        )
+    ]
+
+    assessment = engine.evaluate(
+        case_id="case_partial",
+        invoice=invoice,
+        field_checks=field_checks,
+        directors=directors,
+        address_cluster=address_cluster,
+        litigation_meta={"active_cases": 0},
+        evidence_items=unavailable_evidence
+    )
+
+    # Must fail closed: cannot be PASS!
+    assert assessment.recommendation == RecommendationOutcome.MANUAL_REVIEW
+    assert assessment.evidence_completeness in ("PARTIAL", "INSUFFICIENT")
+    assert "INCOMPLETE_EVIDENCE_FAIL_CLOSED" in assessment.reason_codes

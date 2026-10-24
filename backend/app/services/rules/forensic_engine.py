@@ -12,7 +12,7 @@ from ...schemas.forensic_graph import (
     EntityGraph
 )
 from ...schemas.assessment import RiskAssessment
-from ...schemas.enums import RecommendationOutcome, CheckStatus
+from ...schemas.enums import RecommendationOutcome, CheckStatus, SourceMode
 from .itc_calculator import ITCExposureCalculator
 
 class ForensicRiskEngine:
@@ -266,7 +266,21 @@ class ForensicRiskEngine:
             recommendation = RecommendationOutcome.PASS
 
         # Completeness
-        completeness = "PARTIAL" if any(c.status == CheckStatus.UNAVAILABLE for c in field_checks) else "COMPLETE"
+        has_unavailable_evidence = any(e.source_mode == SourceMode.UNAVAILABLE for e in evidence_items)
+        has_unavailable_checks = any(c.status in (CheckStatus.UNAVAILABLE, CheckStatus.NOT_FOUND) for c in field_checks)
+        if len(evidence_items) == 0 or all(e.source_mode == SourceMode.UNAVAILABLE for e in evidence_items):
+            completeness = "INSUFFICIENT"
+        elif has_unavailable_evidence or has_unavailable_checks:
+            completeness = "PARTIAL"
+        else:
+            completeness = "COMPLETE"
+
+        # Fail closed principle: Missing, incomplete, or unavailable evidence must never produce an unverified PASS
+        if completeness in ("PARTIAL", "INSUFFICIENT"):
+            if "INCOMPLETE_EVIDENCE_FAIL_CLOSED" not in reason_codes:
+                reason_codes.append("INCOMPLETE_EVIDENCE_FAIL_CLOSED")
+            if recommendation == RecommendationOutcome.PASS:
+                recommendation = RecommendationOutcome.MANUAL_REVIEW
 
         return RiskAssessment(
             assessment_id=f"assess_{uuid.uuid4().hex[:8]}",

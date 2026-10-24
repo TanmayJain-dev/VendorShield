@@ -197,6 +197,14 @@ export interface RiskAssessment {
   assessed_at: string;
 }
 
+export interface ReviewSubmissionRequest {
+  action: ReviewActionType;
+  rationale: string;
+  reviewer_id?: string;
+  reviewer_role?: string;
+  requested_documents?: string[];
+}
+
 export interface ReviewAction {
   action_id: string;
   case_id: string;

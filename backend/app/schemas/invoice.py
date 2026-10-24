@@ -19,6 +19,8 @@ class TaxBreakdownItem(BaseModel):
 class FieldExtractionMeta(BaseModel):
     status: ExtractionStatus = ExtractionStatus.EXTRACTED
     confidence: float = 1.0
+    source: Optional[str] = None  # QR, LLM, REGEX, MANUAL
+    extracted_value: Optional[Any] = None
     source_text: Optional[str] = None
     notes: Optional[str] = None
 
@@ -62,6 +64,12 @@ class InvoiceClaim(BaseModel):
     file_sha256: Optional[str] = None
     duplicate_status: Optional[str] = None
     duplicate_case_id: Optional[str] = None
+    buyer_gstin: Optional[str] = None
+    buyer_name: Optional[str] = None
+    irn: Optional[str] = None
+    qr_data: Optional[Dict[str, Any]] = None
+    qr_signature_status: Optional[str] = None
+    extraction_conflicts: List[Dict[str, Any]] = Field(default_factory=list)
 
 class InvoiceCorrection(BaseModel):
     corrected_supplier_name: Optional[str] = None

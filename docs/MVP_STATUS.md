@@ -63,25 +63,50 @@ Route (app)                                 Size  First Load JS
 └ ○ /upload                               4.5 kB         111 kB
 ```
 
+### Phase B (P0): Layered Extraction Pipeline (Completed)
+* **Key Enhancements Implemented:**
+  - **B1: E-Invoice QR Decoder (`qr_einvoice.py`):** Renders PDF pages at 200 DPI via PyMuPDF or decodes images directly with OpenCV. Decodes JWT e-invoice payloads, maps inner claims (`SellerGstin`, `BuyerGstin`, `DocNo`, `DocDt`, `TotInvVal`, `Irn`), labels signature `UNVERIFIED` (or verifies if `IRP_PUBLIC_KEY_PEM` is provided).
+  - **B2: Text & Regex Layer (`text_layer.py`):** PyMuPDF text and bounding boxes. Disambiguates supplier vs buyer GSTINs based on explicit labels and relative page sections. Suppresses header defaults ("Tax Invoice") for supplier name.
+  - **B3: Agnostic Multimodal LLM Extractor (`llm_extractor.py`):** Abstract provider interface with adapters for Gemini and Anthropic over `httpx`. Strict JSON schema with temperature 0, bank account masking (requesting last 4 digits only), and zero-cost `LLM_PROVIDER=none` fallback.
+  - **B4: Merge & Provenance Engine (`merge.py`):** Precedence `QR > LLM > REGEX`. Tags every field with `ExtractionStatus` (`EXTRACTED_QR`, `EXTRACTED_LLM`, `EXTRACTED_REGEX`) and confidence. Detects material disagreements (GSTIN, invoice number, date, total, tax), marks status `CONFLICT`, and emits `EXTRACTION_CONFLICT` warnings.
+  - **B5: Unified Pipeline Orchestration (`pipeline.py`):** Routes PDF and image uploads through the multi-layer pipeline.
+  - **B6: Raw File Persistence & Endpoint:** Persists uploads under `UPLOAD_DIR/<case_id>/<sha256>.<ext>` and provides `GET /api/cases/{case_id}/file` for side-by-side verification.
+  - **B7: Enum & Type Parity:** Extended `ExtractionStatus` with `EXTRACTED_QR`, `EXTRACTED_LLM`, `EXTRACTED_REGEX`, `CONFLICT` and `SourceMode` in backend and frontend `api.ts`.
+
+* **Backend Pytest Output (Phase B):**
+```
+collected 95 items
+======================= 95 passed, 2 warnings in 10.22s =======================
+```
+
+* **Frontend Build Output (Phase B):**
+```
+$ next build
+   ▲ Next.js 15.5.28
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 3.8s
+   Linting and checking validity of types ...
+   Collecting page data ...
+ ✓ Generating static pages (7/7)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ○ /                                    15.9 kB         123 kB
+├ ○ /_not-found                            988 B         103 kB
+├ ƒ /cases/[id]                          9.82 kB         112 kB
+├ ○ /dashboard                             245 B         112 kB
+├ ○ /queue                                 162 B         112 kB
+└ ○ /upload                               4.5 kB         111 kB
+```
+
 ---
 
 ## 2. Phase Implementation Checklist
 
 - [x] **Phase A (P0): Fix Verified Defects**
-  - [x] A1: Fix missing `ExtractionStatus` import in `forensic_engine.py` & add API regression test
-  - [x] A2: Remove checksum bypass in `gstin_validator.py`, create `gstin_tools.py`, fix all fixtures
-  - [x] A3: Simulated orchestrator returns demo fixtures only when `DEMO_MODE=true` and `case.is_demo=true`; otherwise `UNAVAILABLE`
-  - [x] A4: Registry outage / timeout never treated as GST inactive; ignore `UNAVAILABLE` evidence in inactive check
-  - [x] A5: TinyFish async run-and-poll client with `output_schema`; experimental hops behind `ENABLE_EXPERIMENTAL_FORENSICS=false`
-  - [x] A6: Unified `AssessmentService.assess(case)` across all endpoints
-  - [x] A7: Fix `.env.example` and `CORS_ORIGINS` pydantic-settings parsing, clean uvicorn startup test
-  - [x] A8: Opt-in demo data seeding (`SEED_DEMO_DATA=true`), mark `is_demo=true`
-  - [x] A9: Manual intake and parser: remove silent 18% tax fabrication, mark `arithmetic_valid=None` / `UNAVAILABLE`
-  - [x] A10: Image upload validation alignment & preparation for layered pipeline
-  - [x] A11: Auth preparation for Phase D
-  - [x] A12: ITC calculator legal parameters (Sec 74A / 50(3) notes, illustrative exposure labelling)
-  - [x] A13: Documentation parity across README, PROJECT_GUIDE, tests, pnpm run commands
-- [ ] **Phase B (P0): Layered Extraction Pipeline (QR + Text + LLM with Provenance)**
+- [x] **Phase B (P0): Layered Extraction Pipeline (QR + Text + LLM with Provenance)**
 - [ ] **Phase C (P0): Real Checks, Pluggable Providers (Manual, HttpKyc, TinyFish), IFSC & Verdict Semantics**
 - [ ] **Phase D (P0): Minimal Real Auth (Bearer Tokens, Roles, Server-Derived Identity, Audit Verify)**
 - [ ] **Phase E (P0): Frontend for Real Flow (Review Step, Provenance Chips, Manual Evidence Form, Honest Claims)**

@@ -19,7 +19,16 @@ export type CheckStatus =
   | 'STALE_OR_UNCLEAR'
   | 'NOT_APPLICABLE';
 
-export type SourceMode = 'LIVE' | 'SIMULATED' | 'UNAVAILABLE';
+export type SourceMode =
+  | 'LIVE'
+  | 'SIMULATED'
+  | 'UNAVAILABLE'
+  | 'MANUAL'
+  | 'API'
+  | 'DEMO'
+  | 'QR'
+  | 'LLM'
+  | 'REGEX';
 
 export type ReviewActionType =
   | 'APPROVE'
@@ -30,9 +39,13 @@ export type ReviewActionType =
 
 export type ExtractionStatus =
   | 'EXTRACTED'
+  | 'EXTRACTED_QR'
+  | 'EXTRACTED_LLM'
+  | 'EXTRACTED_REGEX'
   | 'CALCULATED'
   | 'INFERRED'
   | 'MANUALLY_CORRECTED'
+  | 'CONFLICT'
   | 'UNAVAILABLE';
 
 export interface LineItem {
@@ -54,6 +67,8 @@ export interface TaxBreakdownItem {
 export interface FieldExtractionMeta {
   status: ExtractionStatus;
   confidence: number;
+  source?: string;
+  extracted_value?: any;
   source_text?: string;
   notes?: string;
 }
@@ -90,6 +105,12 @@ export interface InvoiceClaim {
   file_sha256?: string;
   duplicate_status?: string;
   duplicate_case_id?: string;
+  buyer_gstin?: string;
+  buyer_name?: string;
+  irn?: string;
+  qr_data?: Record<string, any>;
+  qr_signature_status?: string;
+  extraction_conflicts?: any[];
 }
 
 export interface EvidenceItem {

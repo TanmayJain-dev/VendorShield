@@ -4,12 +4,14 @@ import hashlib
 import re
 from typing import List, Optional, Tuple
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from ..schemas.case import Case, CaseSummary
 from ..schemas.invoice import InvoiceClaim, InvoiceCorrection, FieldExtractionMeta
 from ..schemas.enums import CaseStatus, SourceMode, ExtractionStatus
 from ..services.parser.invoice_parser import extract_text_from_pdf_bytes, parse_invoice_text
+from ..services.extraction.pipeline import extract_invoice
 from ..services.validators.gstin_validator import validate_gstin_format
 from ..services.validators.arithmetic_validator import validate_invoice_arithmetic
 from ..services.rules.assessment_service import assessment_service
@@ -96,34 +98,67 @@ async def create_case(
         # 1. Compute file SHA-256 for duplicate detection
         file_sha256 = hashlib.sha256(content).hexdigest()
 
+        # Persist uploaded file under UPLOAD_DIR/<case_id>/<sha256>.<ext>
+        ext = os.path.splitext(safe_filename)[1].lower()
+        if not ext:
+            if content.startswith(b"%PDF-"):
+                ext = ".pdf"
+            elif content.startswith(b"\x89PNG"):
+                ext = ".png"
+            else:
+                ext = ".jpg"
+        case_upload_dir = os.path.join(settings.UPLOAD_DIR, case_id)
+        os.makedirs(case_upload_dir, exist_ok=True)
+        saved_file_path = os.path.join(case_upload_dir, f"{file_sha256}{ext}")
+        with open(saved_file_path, "wb") as f_out:
+            f_out.write(content)
+
         # Check exact file duplicate in database
         existing_file_case = CaseRepository.find_case_by_file_hash(db, file_sha256)
         if existing_file_case:
             duplicate_type = "EXACT_FILE_DUPLICATE"
             duplicate_case_id = existing_file_case.case_id
 
-        # 2. Extract text & parse
-        extracted_text, is_scanned, ocr_msg, parse_errors = extract_text_from_pdf_bytes(content)
-        invoice_claim = parse_invoice_text(
-            text=extracted_text,
-            default_supplier=supplier_name or "Unknown Supplier",
-            file_bytes=content,
-            is_scanned_image=is_scanned,
-            ocr_status_message=ocr_msg,
-            parsing_errors=parse_errors
-        )
+        # 2. Extract using layered extraction pipeline (QR + Text + LLM)
+        mime_type = file.content_type or ("application/pdf" if ext == ".pdf" else "image/jpeg")
+        invoice_claim = await extract_invoice(content, filename=safe_filename, mime_type=mime_type)
+        invoice_claim.file_sha256 = file_sha256
 
         # Override manual fields if explicitly provided in form
         if supplier_name and supplier_name.strip():
             invoice_claim.supplier_name = supplier_name.strip()
+            invoice_claim.extraction_metadata["supplier_name"] = FieldExtractionMeta(
+                status=ExtractionStatus.MANUALLY_CORRECTED,
+                confidence=1.0,
+                source="MANUAL",
+                extracted_value=supplier_name.strip()
+            )
         if gstin and gstin.strip():
             invoice_claim.gstin = gstin.strip().upper()
             invoice_claim.gstin_format_valid, _ = validate_gstin_format(invoice_claim.gstin)
+            invoice_claim.extraction_metadata["supplier_gstin"] = FieldExtractionMeta(
+                status=ExtractionStatus.MANUALLY_CORRECTED,
+                confidence=1.0,
+                source="MANUAL",
+                extracted_value=invoice_claim.gstin
+            )
         if invoice_number and invoice_number.strip():
             invoice_claim.invoice_number = invoice_number.strip()
             ref = invoice_number.strip()
+            invoice_claim.extraction_metadata["invoice_number"] = FieldExtractionMeta(
+                status=ExtractionStatus.MANUALLY_CORRECTED,
+                confidence=1.0,
+                source="MANUAL",
+                extracted_value=invoice_claim.invoice_number
+            )
         if total_amount is not None:
             invoice_claim.total_amount = total_amount
+            invoice_claim.extraction_metadata["total_amount"] = FieldExtractionMeta(
+                status=ExtractionStatus.MANUALLY_CORRECTED,
+                confidence=1.0,
+                source="MANUAL",
+                extracted_value=total_amount
+            )
             # Re-verify arithmetic
             arith_valid, arith_notes = validate_invoice_arithmetic(
                 taxable_amount=invoice_claim.taxable_amount,
@@ -331,3 +366,24 @@ async def correct_invoice_claims(
     )
 
     return saved_case
+
+
+@router.get("/{case_id}/file")
+async def get_case_file(case_id: str, db: Session = Depends(get_db)):
+    """Returns the raw uploaded PDF or image file for side-by-side verification."""
+    case = CaseRepository.get_case(db, case_id)
+    if not case:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Case {case_id} not found")
+    
+    case_upload_dir = os.path.join(settings.UPLOAD_DIR, case_id)
+    if not os.path.isdir(case_upload_dir):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No uploaded file found for this case")
+    
+    files = [f for f in os.listdir(case_upload_dir) if os.path.isfile(os.path.join(case_upload_dir, f))]
+    if not files:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No uploaded file found for this case")
+    
+    file_path = os.path.join(case_upload_dir, files[0])
+    ext = os.path.splitext(file_path)[1].lower()
+    media_type = "application/pdf" if ext == ".pdf" else ("image/png" if ext == ".png" else "image/jpeg")
+    return FileResponse(file_path, media_type=media_type, filename=files[0])

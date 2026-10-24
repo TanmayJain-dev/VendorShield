@@ -28,6 +28,12 @@ class SourceMode(str, Enum):
     LIVE = "LIVE"
     SIMULATED = "SIMULATED"
     UNAVAILABLE = "UNAVAILABLE"
+    MANUAL = "MANUAL"
+    API = "API"
+    DEMO = "DEMO"
+    QR = "QR"
+    LLM = "LLM"
+    REGEX = "REGEX"
 
 class ReviewActionType(str, Enum):
     APPROVE = "APPROVE"
@@ -38,9 +44,13 @@ class ReviewActionType(str, Enum):
 
 class ExtractionStatus(str, Enum):
     EXTRACTED = "EXTRACTED"
+    EXTRACTED_QR = "EXTRACTED_QR"
+    EXTRACTED_LLM = "EXTRACTED_LLM"
+    EXTRACTED_REGEX = "EXTRACTED_REGEX"
     CALCULATED = "CALCULATED"
     INFERRED = "INFERRED"
     MANUALLY_CORRECTED = "MANUALLY_CORRECTED"
+    CONFLICT = "CONFLICT"
     UNAVAILABLE = "UNAVAILABLE"
 
 class DuplicateMatchType(str, Enum):

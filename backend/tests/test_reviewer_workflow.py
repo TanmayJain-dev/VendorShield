@@ -140,8 +140,9 @@ def test_invoice_correction_triggers_fresh_assessment():
         "/api/cases",
         data={
             "supplier_name": "Specter Cloud Technologies",
-            "gstin": "07AAAAA0000A1Z5",
-            "total_amount": 10000.0
+            "gstin": "07AAAAA0000A1Z4",
+            "total_amount": 10000.0,
+            "is_demo": "true"
         }
     )
     case_id = case_resp.json()["case_id"]

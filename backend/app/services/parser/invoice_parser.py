@@ -597,7 +597,7 @@ def parse_invoice_text(
             tax_inference_reason = "Neither taxable amount nor tax breakdown found in document; inferred rough 18% GST estimate."
             warnings.append(
                 "Neither taxable amount nor tax breakdown was found in document. "
-                "Tax figures are rough 18% estimations for guidance only; human confirmation required."
+                "Tax figures are rough 18% estimations for guidance only; not an extracted fact."
             )
             extraction_meta["taxable_amount"] = FieldExtractionMeta(
                 status=ExtractionStatus.INFERRED,

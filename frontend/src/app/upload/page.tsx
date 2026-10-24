@@ -23,7 +23,7 @@ export default function IntakePage() {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [supplierName, setSupplierName] = useState('Apex Courier');
-  const [gstin, setGstin] = useState('07AAAAA0000A1Z5');
+  const [gstin, setGstin] = useState('07AAAAA0000A1Z4');
   const [invoiceNumber, setInvoiceNumber] = useState('INV-2026-8841');
   const [totalAmount, setTotalAmount] = useState('482500.00');
   const [loading, setLoading] = useState(false);
@@ -32,7 +32,7 @@ export default function IntakePage() {
 
   const loadBenchmarkPreset = () => {
     setSupplierName('Apex Courier');
-    setGstin('07AAAAA0000A1Z5');
+    setGstin('07AAAAA0000A1Z4');
     setInvoiceNumber('INV-2026-8841');
     setTotalAmount('482500.00');
     setSelectedScenario('benchmark');
@@ -40,7 +40,7 @@ export default function IntakePage() {
 
   const loadGhostVendorPreset = () => {
     setSupplierName('Specter Cloud Technologies');
-    setGstin('07AAAAA0000A1Z5');
+    setGstin('07AAAAA0000A1Z4');
     setInvoiceNumber('INV-2026-8842');
     setTotalAmount('295000.00');
     setSelectedScenario('ghost');
@@ -279,7 +279,7 @@ export default function IntakePage() {
                       setSelectedScenario(null);
                     }}
                     className="w-full px-3 py-2 font-mono uppercase bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-teal-500 font-semibold text-xs transition-colors"
-                    placeholder="07AAAAA0000A1Z5"
+                    placeholder="07AAAAA0000A1Z4"
                   />
                   {gstin.length === 15 && (
                     <div className="absolute right-2.5 top-1/2 -translate-y-1/2">

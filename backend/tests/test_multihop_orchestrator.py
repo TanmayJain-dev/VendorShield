@@ -11,7 +11,8 @@ async def test_multihop_orchestrator_apex_courier():
 
     evidence, directors, address, litigation = await orchestrator.execute_investigation(
         supplier_name="Apex Courier",
-        gstin="07AAAAA0000A1Z5"
+        gstin="07AAAAA0000A1Z4",
+        is_demo=True
     )
 
     # 4 Hops executed
@@ -28,7 +29,8 @@ async def test_multihop_orchestrator_simulated_provenance_truth_invariants():
     orchestrator = MultiHopTinyFishOrchestrator(api_key="")
     evidence, directors, address, litigation = await orchestrator.execute_investigation(
         supplier_name="Apex Courier",
-        gstin="07AAAAA0000A1Z5"
+        gstin="07AAAAA0000A1Z4",
+        is_demo=True
     )
 
     assert orchestrator.source_mode == SourceMode.SIMULATED
@@ -45,7 +47,8 @@ async def test_multihop_orchestrator_specter_shell():
     orchestrator = MultiHopTinyFishOrchestrator(api_key="")
     evidence, directors, address, litigation = await orchestrator.execute_investigation(
         supplier_name="Specter Cloud Technologies",
-        gstin="07AAAAA0000A1Z5"
+        gstin="07AAAAA0000A1Z4",
+        is_demo=True
     )
 
     assert len(evidence) == 4
@@ -71,7 +74,7 @@ async def test_multihop_orchestrator_live_all_fail_records_unavailable():
         mock_client_cls.return_value.__aenter__.return_value = mock_client
         evidence, directors, address, litigation = await orchestrator.execute_investigation(
             supplier_name="Acme Corp",
-            gstin="07AAAAA0000A1Z5",
+            gstin="07AAAAA0000A1Z4",
             address="123 Industrial Area"
         )
 
@@ -93,7 +96,7 @@ async def test_multihop_orchestrator_live_partial_success():
     mock_resp_success = MagicMock()
     mock_resp_success.status_code = 200
     mock_resp_success.json.return_value = {
-        "result": "GSTIN 07AAAAA0000A1Z5 Active",
+        "result": "GSTIN 07AAAAA0000A1Z4 Active",
         "extracted_facts": {"status": "Active", "legal_name": "Acme Corp Private Limited"}
     }
 
@@ -109,7 +112,7 @@ async def test_multihop_orchestrator_live_partial_success():
         mock_client_cls.return_value.__aenter__.return_value = mock_client
         evidence, directors, address, litigation = await orchestrator.execute_investigation(
             supplier_name="Acme Corp",
-            gstin="07AAAAA0000A1Z5",
+            gstin="07AAAAA0000A1Z4",
             address="123 Industrial Area"
         )
 
@@ -139,7 +142,7 @@ async def test_multihop_orchestrator_malformed_live_response():
         mock_client_cls.return_value.__aenter__.return_value = mock_client
         evidence, directors, address, litigation = await orchestrator.execute_investigation(
             supplier_name="Acme Corp",
-            gstin="07AAAAA0000A1Z5",
+            gstin="07AAAAA0000A1Z4",
             address="123 Industrial Area"
         )
 
@@ -162,7 +165,7 @@ async def test_hop1_succeeds_hops_2_to_4_fail_downgrades_pass_to_manual_review()
     mock_resp_success = MagicMock()
     mock_resp_success.status_code = 200
     mock_resp_success.json.return_value = {
-        "result": "GSTIN 07AAAAA0000A1Z5 Active",
+        "result": "GSTIN 07AAAAA0000A1Z4 Active",
         "extracted_facts": {
             "status": "Active",
             "legal_name": "Apex Courier Private Limited",
@@ -183,7 +186,7 @@ async def test_hop1_succeeds_hops_2_to_4_fail_downgrades_pass_to_manual_review()
         mock_client_cls.return_value.__aenter__.return_value = mock_client
         evidence, directors, address, litigation = await orchestrator.execute_investigation(
             supplier_name="Apex Courier",
-            gstin="07AAAAA0000A1Z5",
+            gstin="07AAAAA0000A1Z4",
             address="Plot 44, Okhla Phase 3, New Delhi"
         )
 
@@ -207,7 +210,7 @@ async def test_hop1_succeeds_hops_2_to_4_fail_downgrades_pass_to_manual_review()
         invoice_date="2026-10-20",
         supplier_name="Apex Courier",
         legal_name="Apex Courier Private Limited",
-        gstin="07AAAAA0000A1Z5",
+        gstin="07AAAAA0000A1Z4",
         taxable_amount=100000.0,
         cgst=9000.0,
         sgst=9000.0,

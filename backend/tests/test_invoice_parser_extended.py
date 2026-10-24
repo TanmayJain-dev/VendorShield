@@ -11,7 +11,7 @@ def test_parse_invoice_with_explicit_cgst_sgst():
     TAX INVOICE
     Invoice No: INV-2026-9901
     Date: 2026-10-18
-    GSTIN: 07AAAAA0000A1Z5
+    GSTIN: 07AAAAA0000A1Z4
     Taxable Amount: 100,000.00
     CGST @ 9%: 9,000.00
     SGST @ 9%: 9,000.00
@@ -100,7 +100,7 @@ def test_multirate_gst_preserved():
     TAX INVOICE
     Invoice No: INV-5PCT-101
     Date: 2026-10-10
-    GSTIN: 07AAAAA0000A1Z5
+    GSTIN: 07AAAAA0000A1Z4
     Taxable Amount: 100,000.00
     CGST @ 2.5%: 2,500.00
     SGST @ 2.5%: 2,500.00
@@ -119,7 +119,7 @@ def test_multirate_gst_preserved():
     TAX INVOICE
     Invoice No: INV-28PCT-202
     Date: 2026-10-12
-    GSTIN: 07AAAAA0000A1Z5
+    GSTIN: 07AAAAA0000A1Z4
     Taxable Amount: 50,000.00
     IGST @ 28%: 14,000.00
     Total Amount: 64,000.00
@@ -158,7 +158,7 @@ def test_zero_tax_invoice_fails_closed_to_manual_review():
     text = """
     TAX INVOICE
     Invoice No: INV-ZERO-TAX-99
-    GSTIN: 07AAAAA0000A1Z5
+    GSTIN: 07AAAAA0000A1Z4
     Taxable Amount: 50,000.00
     CGST: 0.00
     SGST: 0.00

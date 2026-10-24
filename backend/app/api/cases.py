@@ -12,8 +12,8 @@ from ..schemas.enums import CaseStatus, SourceMode, ExtractionStatus
 from ..services.parser.invoice_parser import extract_text_from_pdf_bytes, parse_invoice_text
 from ..services.validators.gstin_validator import validate_gstin_format
 from ..services.validators.arithmetic_validator import validate_invoice_arithmetic
+from ..services.rules.assessment_service import assessment_service
 from ..services.reconciler.evidence_reconciler import EvidenceReconciler, normalize_business_name
-from ..services.rules.engine import DeterministicRuleEngine
 from ..services.audit.trail import AuditTrailService
 from ..db.database import get_db, init_db
 from ..db.repository import CaseRepository
@@ -22,7 +22,6 @@ from ..config import settings
 router = APIRouter(prefix="/cases", tags=["cases"])
 
 reconciler = EvidenceReconciler()
-rule_engine = DeterministicRuleEngine()
 audit_service = AuditTrailService()
 
 # Initialize DB tables on startup
@@ -59,11 +58,9 @@ def _compute_normalized_invoice_key(supplier_name: Optional[str], invoice_number
     return f"{norm_supp}_{norm_inv}"
 
 @router.get("", response_model=List[CaseSummary])
-async def list_cases(db: Session = Depends(get_db)):
+async def list_cases(include_demo: bool = False, db: Session = Depends(get_db)):
     """List all vendor verification cases from persistent database storage."""
-    # Ensure benchmark case is seeded if db empty
-    CaseRepository.seed_benchmark_case(db)
-    return CaseRepository.list_cases(db)
+    return CaseRepository.list_cases(db, include_demo=include_demo)
 
 @router.post("", response_model=Case, status_code=status.HTTP_201_CREATED)
 async def create_case(
@@ -72,13 +69,13 @@ async def create_case(
     gstin: Optional[str] = Form(None),
     invoice_number: Optional[str] = Form(None),
     total_amount: Optional[float] = Form(None),
+    is_demo: bool = Form(False),
     db: Session = Depends(get_db)
 ):
     """
     Creates a new due-diligence case from an uploaded invoice or manual payload.
     Enforces upload security, duplicate detection, and persistent storage.
     """
-    CaseRepository.seed_benchmark_case(db)
 
     case_id = f"case_{uuid.uuid4().hex[:8]}"
     ref = invoice_number or f"CASE-{uuid.uuid4().hex[:6].upper()}"
@@ -140,18 +137,20 @@ async def create_case(
             invoice_claim.arithmetic_valid = arith_valid
             invoice_claim.arithmetic_notes = arith_notes
     else:
-        # Manual payload intake
+        # Manual payload intake - do not fabricate 18% tax or mark arithmetic valid
         gstin_valid, _ = validate_gstin_format(gstin) if gstin else (False, "Missing")
         invoice_claim = InvoiceClaim(
             invoice_number=ref,
             supplier_name=supplier_name or "Unknown Supplier",
             gstin=gstin.upper() if gstin else None,
             total_amount=total_amount or 0.0,
-            taxable_amount=round((total_amount or 0.0) / 1.18, 2) if total_amount else 0.0,
-            cgst=round(((total_amount or 0.0) - round((total_amount or 0.0) / 1.18, 2)) / 2, 2) if total_amount else 0.0,
-            sgst=round(((total_amount or 0.0) - round((total_amount or 0.0) / 1.18, 2)) / 2, 2) if total_amount else 0.0,
+            taxable_amount=0.0,
+            cgst=0.0,
+            sgst=0.0,
+            igst=0.0,
             gstin_format_valid=gstin_valid,
-            arithmetic_valid=True
+            arithmetic_valid=None,
+            arithmetic_notes="ARITHMETIC_UNVERIFIED: Manual entry does not specify tax components or taxable base."
         )
 
     # 3. Duplicate check on normalized invoice identifier
@@ -179,6 +178,7 @@ async def create_case(
         file_sha256=file_sha256,
         duplicate_of_case_id=duplicate_case_id,
         duplicate_type=duplicate_type,
+        is_demo=is_demo,
         invoice=invoice_claim
     )
 
@@ -303,10 +303,9 @@ async def correct_invoice_claims(
     inv.arithmetic_valid = arith_valid
     inv.arithmetic_notes = arith_notes
 
-    # If case already had evidence or assessment, rerun reconciliation and risk engine to generate a fresh assessment
+    # If case already had evidence or assessment, rerun unified assessment service
     if case.evidence_items or case.assessment:
-        field_checks = reconciler.reconcile(inv, case.evidence_items)
-        fresh_assessment = rule_engine.evaluate(case_id, inv, field_checks)
+        fresh_assessment = assessment_service.assess(case)
         case.assessment = fresh_assessment
         case.status = CaseStatus.READY_FOR_REVIEW
 

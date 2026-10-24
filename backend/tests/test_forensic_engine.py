@@ -10,7 +10,7 @@ def test_forensic_engine_apex_courier():
     invoice = InvoiceClaim(
         invoice_number="INV-2026-8841",
         supplier_name="Apex Courier",
-        gstin="07AAAAA0000A1Z5",
+        gstin="07AAAAA0000A1Z4",
         taxable_amount=408898.31,
         cgst=36800.85,
         sgst=36800.85,
@@ -75,7 +75,7 @@ def test_forensic_engine_specter_shell_mill_blocks():
     invoice = InvoiceClaim(
         invoice_number="INV-2026-8842",
         supplier_name="Specter Cloud Technologies",
-        gstin="07AAAAA0000A1Z5",
+        gstin="07AAAAA0000A1Z4",
         taxable_amount=250000.0,
         cgst=22500.0,
         sgst=22500.0,
@@ -130,7 +130,7 @@ def test_forensic_engine_incomplete_evidence_fails_closed():
     invoice = InvoiceClaim(
         invoice_number="INV-2026-9999",
         supplier_name="Clean Looking Vendor",
-        gstin="07AAAAA0000A1Z5",
+        gstin="07AAAAA0000A1Z4",
         taxable_amount=10000.0,
         cgst=900.0,
         sgst=900.0,

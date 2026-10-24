@@ -69,9 +69,9 @@ class EvidenceReconciler:
     ) -> List[FieldCheckResult]:
         checks = []
 
-        # Find GST/Legal registry evidence
+        # Find GST/Legal registry evidence (excluding UNAVAILABLE evidence)
         gst_evidence = next(
-            (e for e in evidence_items if "gst" in e.source_name.lower() or "legal" in e.claim_supported.lower()),
+            (e for e in evidence_items if e.source_mode != SourceMode.UNAVAILABLE and ("gst" in e.source_name.lower() or "legal" in e.claim_supported.lower())),
             None
         )
 
@@ -199,20 +199,21 @@ class EvidenceReconciler:
         # -------------------------------------------------------------
         if gst_evidence and "status" in gst_evidence.facts:
             reg_status = str(gst_evidence.facts["status"]).strip()
-            if reg_status.lower() == "active":
+            norm_status = reg_status.lower()
+            if "active" in norm_status:
                 checks.append(FieldCheckResult(
                     check_id="chk_gst_active",
                     field_name="GST Registration Status",
                     invoice_value=invoice.gstin,
-                    evidence_value="Active",
+                    evidence_value=reg_status,
                     status=CheckStatus.MATCH,
-                    explanation="Authoritative registry confirms GST registration is currently Active.",
+                    explanation=f"Authoritative registry confirms GST registration is {reg_status}.",
                     evidence_id=gst_evidence.evidence_id,
                     source_url=gst_evidence.source_url,
                     source_mode=gst_evidence.source_mode,
                     is_fallback=gst_evidence.is_fallback
                 ))
-            else:
+            elif any(s in norm_status for s in ["cancelled", "suspended", "inactive", "cancelled suo-moto", "cancelled suo moto"]):
                 checks.append(FieldCheckResult(
                     check_id="chk_gst_inactive",
                     field_name="GST Registration Status",
@@ -221,6 +222,20 @@ class EvidenceReconciler:
                     status=CheckStatus.MISMATCH,
                     reason_code="GST_STATUS_INACTIVE_CONFIRMED",
                     explanation=f"GST registration is listed as {reg_status}. Input Tax Credit (ITC) may be invalid or disallowed.",
+                    evidence_id=gst_evidence.evidence_id,
+                    source_url=gst_evidence.source_url,
+                    source_mode=gst_evidence.source_mode,
+                    is_fallback=gst_evidence.is_fallback
+                ))
+            else:
+                checks.append(FieldCheckResult(
+                    check_id="chk_gst_unknown",
+                    field_name="GST Registration Status",
+                    invoice_value=invoice.gstin,
+                    evidence_value=reg_status,
+                    status=CheckStatus.UNAVAILABLE,
+                    reason_code="GST_STATUS_UNKNOWN",
+                    explanation=f"GST registration status '{reg_status}' could not be definitively verified as active or inactive. Secondary verification required.",
                     evidence_id=gst_evidence.evidence_id,
                     source_url=gst_evidence.source_url,
                     source_mode=gst_evidence.source_mode,

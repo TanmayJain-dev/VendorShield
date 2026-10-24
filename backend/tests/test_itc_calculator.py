@@ -7,7 +7,7 @@ def test_itc_calculator_clean_vendor():
     invoice = InvoiceClaim(
         invoice_number="INV-CLEAN-01",
         supplier_name="Clean Logistics Ltd",
-        gstin="07AAAAA0000A1Z5",
+        gstin="07AAAAA0000A1Z4",
         taxable_amount=100000.0,
         cgst=9000.0,
         sgst=9000.0,
@@ -39,7 +39,7 @@ def test_itc_calculator_shell_contagion_clawback():
     invoice = InvoiceClaim(
         invoice_number="INV-SHELL-99",
         supplier_name="Bogus Trading Pvt Ltd",
-        gstin="07AAAAA0000A1Z5",
+        gstin="07AAAAA0000A1Z4",
         taxable_amount=5000000.0,
         cgst=450000.0,
         sgst=450000.0,
@@ -69,7 +69,7 @@ def test_itc_calculator_moderate_risk():
     invoice = InvoiceClaim(
         invoice_number="INV-MOD-01",
         supplier_name="Moderate Logistics Pvt Ltd",
-        gstin="07AAAAA0000A1Z5",
+        gstin="07AAAAA0000A1Z4",
         taxable_amount=200000.0,
         cgst=18000.0,
         sgst=18000.0,
@@ -96,7 +96,7 @@ def test_itc_calculator_zero_tax_invoice():
     invoice = InvoiceClaim(
         invoice_number="INV-ZERO-01",
         supplier_name="Exempt Supply Vendor",
-        gstin="07AAAAA0000A1Z5",
+        gstin="07AAAAA0000A1Z4",
         taxable_amount=50000.0,
         cgst=0.0,
         sgst=0.0,

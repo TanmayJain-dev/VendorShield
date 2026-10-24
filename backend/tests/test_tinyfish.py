@@ -9,7 +9,7 @@ async def test_tinyfish_simulated_mode():
 
     evidence = await service.investigate_vendor(
         supplier_name="Apex Courier",
-        gstin="07AAAAA0000A1Z5"
+        gstin="07AAAAA0000A1Z4"
     )
     assert len(evidence) >= 2
     # Verify sources and facts

@@ -220,6 +220,7 @@ class CaseRepository:
             file_sha256=cm.file_sha256,
             duplicate_of_case_id=cm.duplicate_of_case_id,
             duplicate_type=cm.duplicate_type,
+            is_demo=bool(getattr(cm, "is_demo", False)),
             invoice=inv_claim,
             evidence_items=evidence_items,
             assessment=assessment,
@@ -236,8 +237,11 @@ class CaseRepository:
         return CaseRepository.model_to_case(cm)
 
     @staticmethod
-    def list_cases(db: Session) -> List[CaseSummary]:
-        cases = db.query(CaseModel).order_by(CaseModel.created_at.desc()).all()
+    def list_cases(db: Session, include_demo: bool = False) -> List[CaseSummary]:
+        query = db.query(CaseModel)
+        if not include_demo:
+            query = query.filter(CaseModel.is_demo == False)
+        cases = query.order_by(CaseModel.created_at.desc()).all()
         summaries = []
         for cm in cases:
             supp_name = "Unknown"
@@ -268,6 +272,7 @@ class CaseRepository:
                 recommendation=rec,
                 risk_score=score,
                 duplicate_type=cm.duplicate_type,
+                is_demo=bool(getattr(cm, "is_demo", False)),
                 created_at=cm.created_at
             ))
         return summaries
@@ -289,12 +294,14 @@ class CaseRepository:
                 normalized_invoice_key=normalized_key,
                 duplicate_of_case_id=case.duplicate_of_case_id,
                 duplicate_type=case.duplicate_type,
+                is_demo=bool(getattr(case, "is_demo", False)),
                 audit_hash_sha256=case.audit_hash_sha256
             )
             db.add(cm)
         else:
             cm.status = case.status.value
             cm.source_mode = case.source_mode.value
+            cm.is_demo = bool(getattr(case, "is_demo", False))
             cm.updated_at = now_str
             if case.file_sha256:
                 cm.file_sha256 = case.file_sha256
@@ -562,6 +569,7 @@ class CaseRepository:
             case_reference="INV-2026-8841",
             status=CaseStatus.PARSED,
             source_mode=SourceMode.SIMULATED,
+            is_demo=True,
             created_at=now_str,
             updated_at=now_str,
             invoice=InvoiceClaim(
@@ -569,7 +577,7 @@ class CaseRepository:
                 invoice_date="2026-10-15",
                 supplier_name="Apex Courier",
                 legal_name="Apex Global Logistics Private Limited",
-                gstin="07AAAAA0000A1Z5",
+                gstin="07AAAAA0000A1Z4",
                 billing_address="Okhla Industrial Area, Phase-II, New Delhi - 110020",
                 taxable_amount=408898.31,
                 cgst=36800.85,

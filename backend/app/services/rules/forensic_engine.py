@@ -12,7 +12,7 @@ from ...schemas.forensic_graph import (
     EntityGraph
 )
 from ...schemas.assessment import RiskAssessment
-from ...schemas.enums import RecommendationOutcome, CheckStatus, SourceMode
+from ...schemas.enums import RecommendationOutcome, CheckStatus, SourceMode, ExtractionStatus
 from .itc_calculator import ITCExposureCalculator
 
 class ForensicRiskEngine:
@@ -56,6 +56,13 @@ class ForensicRiskEngine:
         # ----------------------------------------------------
         # 2. Compute Vector 3: Address Collocation Density
         # ----------------------------------------------------
+        if address_cluster is None:
+            address_cluster = AddressClusterProfile(
+                raw_address=invoice.billing_address or "Unknown",
+                collocated_gstins_count=1,
+                premises_type="COMMERCIAL_HUB",
+                is_ghost_hub=False
+            )
         density = address_cluster.collocated_gstins_count
         if address_cluster.is_ghost_hub or density > 15:
             hard_gates_triggered.append("GHOST_HUB_ADDRESS_DETECTED")

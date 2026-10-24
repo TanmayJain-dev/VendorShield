@@ -39,7 +39,8 @@ class MultiHopTinyFishOrchestrator:
         self,
         supplier_name: str,
         gstin: Optional[str] = None,
-        address: Optional[str] = None
+        address: Optional[str] = None,
+        is_demo: bool = False
     ) -> Tuple[List[EvidenceItem], List[DirectorProfile], AddressClusterProfile, Dict[str, Any]]:
         """
         Executes the 4-hop forensic pipeline.
@@ -48,9 +49,36 @@ class MultiHopTinyFishOrchestrator:
         """
         if self.api_key:
             return await self._execute_live_multihop(supplier_name, gstin, address)
-        else:
+        elif getattr(settings, "DEMO_MODE", False) or is_demo:
             self._effective_mode = SourceMode.SIMULATED
             return self._execute_simulated_multihop(supplier_name, gstin, address)
+        else:
+            self._effective_mode = SourceMode.UNAVAILABLE
+            now = datetime.now(timezone.utc).isoformat()
+            evidence_items = [
+                EvidenceItem(
+                    evidence_id="ev_no_registry_provider",
+                    source_url="internal://registry-provider",
+                    source_name="Registry Provider [Not Configured]",
+                    claim_supported="Legal Entity Standing & Status",
+                    source_type="GOVERNMENT_REGISTRY",
+                    source_mode=SourceMode.UNAVAILABLE,
+                    retrieved_at=now,
+                    raw_excerpt="No external registry provider (GSP/KYC or TinyFish) configured. Manual evidence entry required.",
+                    facts={"status": "UNAVAILABLE", "reason": "NO_PROVIDER_CONFIGURED"},
+                    is_authoritative=False,
+                    is_fallback=False
+                )
+            ]
+            directors: List[DirectorProfile] = []
+            address_cluster = AddressClusterProfile(
+                raw_address=address or "Unknown Address",
+                collocated_gstins_count=1,
+                premises_type="UNKNOWN",
+                is_ghost_hub=False
+            )
+            litigation_meta: Dict[str, Any] = {"active_cases": 0, "nclt_petitions": [], "status": "UNKNOWN"}
+            return evidence_items, directors, address_cluster, litigation_meta
 
     async def _execute_live_multihop(
         self,
@@ -408,7 +436,7 @@ class MultiHopTinyFishOrchestrator:
             evidence_items = [
                 EvidenceItem(
                     evidence_id="ev_hop1_gst_shell",
-                    source_url="demo://gstn-statutory-registry/07AAAAA0000A1Z5",
+                    source_url="demo://gstn-statutory-registry/07BSPCT9999C1ZE",
                     source_name="[DEMO FIXTURE] GSTN Statutory Registry",
                     claim_supported="Legal Entity Registration & Filing Cadence",
                     source_type="GOVERNMENT_REGISTRY",
@@ -416,7 +444,7 @@ class MultiHopTinyFishOrchestrator:
                     is_fallback=True,
                     fallback_reason="DEMO_EVALUATION_FIXTURE: System is operating in simulated evaluation mode without live TinyFish API credentials.",
                     retrieved_at=now,
-                    raw_excerpt="[DEMO FIXTURE] GSTIN: 07AAAAA0000A1Z5 | Entity: Specter Cloud Technologies Pvt Ltd | Status: Active | Reg Date: 2026-07-01 | GSTR-3B: 2 Months Overdue | Cash Tax Paid: 0.1% (99.9% offset via ITC).",
+                    raw_excerpt="[DEMO FIXTURE] GSTIN: 07BSPCT9999C1ZE | Entity: Specter Cloud Technologies Pvt Ltd | Status: Active | Reg Date: 2026-07-01 | GSTR-3B: 2 Months Overdue | Cash Tax Paid: 0.1% (99.9% offset via ITC).",
                     facts={"status": "Active", "filing_delay_months": 2, "cash_tax_ratio": 0.001},
                     is_authoritative=False
                 ),
@@ -489,7 +517,7 @@ class MultiHopTinyFishOrchestrator:
         evidence_items = [
             EvidenceItem(
                 evidence_id="ev_hop1_gst_apex",
-                source_url="demo://gstn-statutory-registry/07AAAAA0000A1Z5",
+                source_url="demo://gstn-statutory-registry/07AAAAA0000A1Z4",
                 source_name="[DEMO FIXTURE] GSTN Statutory Registry",
                 claim_supported="Legal Entity Registration & Trade Name",
                 source_type="GOVERNMENT_REGISTRY",
@@ -497,7 +525,7 @@ class MultiHopTinyFishOrchestrator:
                 is_fallback=True,
                 fallback_reason="DEMO_EVALUATION_FIXTURE: System is operating in simulated evaluation mode without live TinyFish API credentials.",
                 retrieved_at=now,
-                raw_excerpt="[DEMO FIXTURE] GSTIN: 07AAAAA0000A1Z5 | Legal: Apex Global Logistics Pvt Ltd | Trade: Apex Courier | Status: Active | Constitution: Private Limited | Reg Date: 2018-04-12 | GSTR-3B: Regular.",
+                raw_excerpt="[DEMO FIXTURE] GSTIN: 07AAAAA0000A1Z4 | Legal: Apex Global Logistics Pvt Ltd | Trade: Apex Courier | Status: Active | Constitution: Private Limited | Reg Date: 2018-04-12 | GSTR-3B: Regular.",
                 facts={
                     "legal_name": "Apex Global Logistics Private Limited",
                     "trade_name": "Apex Courier",

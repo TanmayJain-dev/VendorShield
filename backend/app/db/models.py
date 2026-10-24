@@ -18,6 +18,7 @@ class CaseModel(Base):
     normalized_invoice_key = Column(String(128), index=True, nullable=True)
     duplicate_of_case_id = Column(String(64), nullable=True)
     duplicate_type = Column(String(64), nullable=True)
+    is_demo = Column(Boolean, default=False, nullable=False)
     audit_hash_sha256 = Column(String(64), nullable=True)
 
     # Relationships

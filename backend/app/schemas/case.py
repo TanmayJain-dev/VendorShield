@@ -18,6 +18,7 @@ class CaseSummary(BaseModel):
     recommendation: Optional[RecommendationOutcome] = None
     risk_score: Optional[int] = None
     duplicate_type: Optional[str] = None
+    is_demo: bool = False
     created_at: str
 
 class Case(BaseModel):
@@ -25,6 +26,7 @@ class Case(BaseModel):
     case_reference: str
     status: CaseStatus = CaseStatus.SUBMITTED
     source_mode: SourceMode = SourceMode.SIMULATED
+    is_demo: bool = False
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     created_by: str = "ap_analyst"

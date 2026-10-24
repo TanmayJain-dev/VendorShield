@@ -234,7 +234,7 @@ export default function HomePage() {
                 <div className="md:col-span-5 bg-white dark:bg-[#0f141f] p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-2 text-xs">
                   <div className="text-[10px] uppercase tracking-wider text-zinc-400 font-medium">Raw Extracted Claim</div>
                   <div className="font-mono text-zinc-900 dark:text-zinc-100 font-semibold">Apex Courier Pvt Ltd</div>
-                  <div className="font-mono text-teal-600 dark:text-teal-400 text-[11px]">GSTIN: 07AAAAA0000A1Z5</div>
+                  <div className="font-mono text-teal-600 dark:text-teal-400 text-[11px]">GSTIN: 07AAAAA0000A1Z4</div>
                   <div className="font-mono text-zinc-700 dark:text-zinc-300 tabular-nums">Amount: ₹4,82,500.00</div>
                 </div>
               </div>
@@ -262,7 +262,7 @@ export default function HomePage() {
                 <div className="md:col-span-5 bg-white dark:bg-[#0f141f] p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-2 text-xs">
                   <div className="text-[10px] uppercase tracking-wider text-zinc-400 font-medium">Retrieved Public Citations</div>
                   <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900 text-[11px] font-mono text-zinc-700 dark:text-zinc-300">
-                    GST Status: ACTIVE &bull; Legal: Apex Express Logistics Pvt Ltd
+                    GST Status: ACTIVE &bull; Legal: Apex Global Logistics Pvt Ltd
                   </div>
                   <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-900 text-[11px] font-mono text-zinc-700 dark:text-zinc-300">
                     MCA21: CIN U64120DL2018PTC334912 &bull; Inc. 2018
@@ -731,7 +731,7 @@ export default function HomePage() {
                           GSTIN Checksum &amp; Status Validation
                         </div>
                         <div className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">
-                          GSTIN <code className="font-mono">07AAAAA0000A1Z5</code> validated against Luhn checksum algorithm. Status: <strong>ACTIVE</strong>.
+                          GSTIN <code className="font-mono">07AAAAA0000A1Z4</code> validated against Luhn checksum algorithm. Status: <strong>ACTIVE</strong>.
                         </div>
                       </div>
                     </div>
@@ -744,7 +744,7 @@ export default function HomePage() {
                           Supplier Entity Name Concordance
                         </div>
                         <div className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">
-                          Invoice displays trade name &ldquo;Apex Courier&rdquo;. Registered MCA legal entity is &ldquo;Apex Express Logistics Pvt Ltd&rdquo;.
+                          Invoice displays trade name &ldquo;Apex Courier&rdquo;. Registered MCA legal entity is &ldquo;Apex Global Logistics Pvt Ltd&rdquo;.
                         </div>
                       </div>
                     </div>
@@ -799,7 +799,7 @@ export default function HomePage() {
                   </div>
                   <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
                     <span className="text-zinc-400 block text-[10px]">GSTIN CLAIM</span>
-                    <span className="font-mono text-zinc-900 dark:text-zinc-100">07AAAAA0000A1Z5</span>
+                    <span className="font-mono text-zinc-900 dark:text-zinc-100">07AAAAA0000A1Z4</span>
                   </div>
                   <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
                     <span className="text-zinc-400 block text-[10px]">TOTAL PAYABLE</span>

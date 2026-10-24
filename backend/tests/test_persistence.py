@@ -31,7 +31,7 @@ def test_case_persistence_across_sessions(tmp_path):
         invoice=InvoiceClaim(
             invoice_number="INV-PERSIST-101",
             supplier_name="Persistence Test Vendor",
-            gstin="07AAAAA0000A1Z5",
+            gstin="07AAAAA0000A1Z4",
             total_amount=150000.0,
             taxable_amount=127118.64,
             cgst=11440.68,

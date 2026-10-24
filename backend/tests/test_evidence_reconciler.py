@@ -19,7 +19,7 @@ def test_reconcile_exact_name_match(reconciler):
     invoice = InvoiceClaim(
         invoice_number="INV-001",
         supplier_name="Apex Global Logistics",
-        gstin="07AAAAA0000A1Z5",
+        gstin="07AAAAA0000A1Z4",
         total_amount=1000.0
     )
     evidence = [
@@ -42,7 +42,7 @@ def test_reconcile_trade_alias_possible_match(reconciler):
     invoice = InvoiceClaim(
         invoice_number="INV-002",
         supplier_name="Apex Courier",
-        gstin="07AAAAA0000A1Z5",
+        gstin="07AAAAA0000A1Z4",
         total_amount=1000.0
     )
     evidence = [
@@ -70,7 +70,7 @@ def test_never_match_merely_because_trade_name_field_exists(reconciler):
     invoice = InvoiceClaim(
         invoice_number="INV-003",
         supplier_name="Specter Cloud Technologies",
-        gstin="07AAAAA0000A1Z5",
+        gstin="07AAAAA0000A1Z4",
         total_amount=1000.0
     )
     evidence = [

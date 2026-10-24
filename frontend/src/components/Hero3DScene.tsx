@@ -215,7 +215,7 @@ export function Hero3DScene() {
             <div className="flex justify-between">
               <span className="text-zinc-500 dark:text-zinc-400">GSTIN Claim:</span>
               <span className="font-mono text-[9.5px] text-teal-700 dark:text-teal-300 font-bold">
-                07AAAAA0000A1Z5
+                07AAAAA0000A1Z4
               </span>
             </div>
             <div className="flex justify-between">
@@ -252,7 +252,7 @@ export function Hero3DScene() {
                 </span>
               </div>
               <div className="text-[10px] font-semibold text-zinc-900 dark:text-zinc-100 truncate">
-                07AAAAA0000A1Z5 Checksum Valid
+                07AAAAA0000A1Z4 Checksum Valid
               </div>
             </div>
           </div>

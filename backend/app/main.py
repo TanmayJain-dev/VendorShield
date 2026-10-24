@@ -12,6 +12,14 @@ from .api.reports import router as reports_router
 async def lifespan(app: FastAPI):
     # Initialize persistent SQLite/Postgres database
     init_db()
+    if getattr(settings, "SEED_DEMO_DATA", False):
+        from .db.database import SessionLocal
+        from .db.repository import CaseRepository
+        db = SessionLocal()
+        try:
+            CaseRepository.seed_benchmark_case(db)
+        finally:
+            db.close()
     yield
 
 app = FastAPI(

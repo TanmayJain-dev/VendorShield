@@ -13,7 +13,15 @@ def test_health_endpoint():
     assert data["service"] == "VendorShield AI"
 
 def test_list_cases():
-    response = client.get("/api/cases")
+    from app.db.database import SessionLocal
+    from app.db.repository import CaseRepository
+    db = SessionLocal()
+    try:
+        CaseRepository.seed_benchmark_case(db)
+    finally:
+        db.close()
+
+    response = client.get("/api/cases?include_demo=true")
     assert response.status_code == 200
     data = response.json()
     assert len(data) >= 1
@@ -27,9 +35,10 @@ def test_create_and_investigate_case():
         "/api/cases",
         data={
             "supplier_name": "Apex Courier",
-            "gstin": "07AAAAA0000A1Z5",
+            "gstin": "07AAAAA0000A1Z4",
             "invoice_number": "INV-TEST-001",
-            "total_amount": 482500.00
+            "total_amount": 482500.00,
+            "is_demo": "true"
         }
     )
     assert create_resp.status_code == 201

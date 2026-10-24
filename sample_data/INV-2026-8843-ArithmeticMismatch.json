@@ -1,0 +1,19 @@
+{
+  "case_reference": "INV-2026-8843",
+  "supplier_name": "QuickPrint Solutions",
+  "gstin": "07AAAAA0000A1Z5",
+  "invoice_date": "2026-10-20",
+  "taxable_amount": 100000.00,
+  "cgst": 9000.00,
+  "sgst": 9000.00,
+  "igst": 0.0,
+  "total_amount": 145000.00,
+  "billing_address": "Nehru Place, New Delhi",
+  "bank_account_masked": "XXXX-XXXX-1122",
+  "ifsc_code": "ICIC0000001",
+  "expected_outcome": "MANUAL_REVIEW",
+  "expected_reason_codes": [
+    "INVOICE_ARITHMETIC_MISMATCH"
+  ],
+  "notes": "Line item / tax components (₹1,18,000) do not reconcile with claimed grand total (₹1,45,000)."
+}

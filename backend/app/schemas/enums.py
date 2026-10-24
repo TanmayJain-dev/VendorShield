@@ -1,0 +1,34 @@
+from enum import Enum
+
+class CaseStatus(str, Enum):
+    SUBMITTED = "SUBMITTED"
+    PARSED = "PARSED"
+    INVESTIGATING = "INVESTIGATING"
+    READY_FOR_REVIEW = "READY_FOR_REVIEW"
+    RESOLVED = "RESOLVED"
+    ERROR = "ERROR"
+
+class RecommendationOutcome(str, Enum):
+    PASS = "PASS"
+    MANUAL_REVIEW = "MANUAL_REVIEW"
+    BLOCK = "BLOCK"
+
+class CheckStatus(str, Enum):
+    MATCH = "MATCH"
+    POSSIBLE_MATCH = "POSSIBLE_MATCH"
+    MISMATCH = "MISMATCH"
+    NOT_FOUND = "NOT_FOUND"
+    UNAVAILABLE = "UNAVAILABLE"
+    STALE_OR_UNCLEAR = "STALE_OR_UNCLEAR"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+class SourceMode(str, Enum):
+    LIVE = "LIVE"
+    SIMULATED = "SIMULATED"
+
+class ReviewActionType(str, Enum):
+    APPROVE = "APPROVE"
+    APPROVE_WITH_EXCEPTION = "APPROVE_WITH_EXCEPTION"
+    REQUEST_DOCUMENTS = "REQUEST_DOCUMENTS"
+    ESCALATE = "ESCALATE"
+    REJECT = "REJECT"

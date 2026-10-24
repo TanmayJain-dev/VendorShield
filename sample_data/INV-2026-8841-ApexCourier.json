@@ -1,0 +1,21 @@
+{
+  "case_reference": "INV-2026-8841",
+  "supplier_name": "Apex Courier",
+  "gstin": "07AAAAA0000A1Z5",
+  "invoice_date": "2026-10-15",
+  "taxable_amount": 408898.31,
+  "cgst": 36800.85,
+  "sgst": 36800.85,
+  "igst": 0.0,
+  "total_amount": 482500.00,
+  "billing_address": "Okhla Industrial Area, Phase-II, New Delhi - 110020",
+  "bank_account_masked": "XXXX-XXXX-9921",
+  "ifsc_code": "HDFC0000123",
+  "expected_outcome": "MANUAL_REVIEW",
+  "expected_score": 68,
+  "expected_reason_codes": [
+    "LEGAL_NAME_MISMATCH",
+    "BANK_OWNERSHIP_UNVERIFIED"
+  ],
+  "notes": "Illustrative benchmark case from HackIIITD submission deck. Supplier trade name Apex Courier differs from registered legal entity Apex Global Logistics Pvt Ltd."
+}

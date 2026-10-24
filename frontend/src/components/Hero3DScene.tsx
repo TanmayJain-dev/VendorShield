@@ -32,8 +32,14 @@ export function Hero3DScene() {
     setMounted(true);
   }, []);
 
-  // Smooth mouse parallax interpolation
+  // Smooth mouse parallax interpolation (respects prefers-reduced-motion)
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setRotateX(0);
+      setRotateY(0);
+      return;
+    }
+
     let targetX = 10;
     let targetY = -12;
     let currentX = 10;

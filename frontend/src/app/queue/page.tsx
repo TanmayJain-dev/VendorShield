@@ -17,6 +17,7 @@ import {
   ArrowLeft,
   X,
   FileText,
+  Download,
   Filter
 } from 'lucide-react';
 
@@ -26,12 +27,13 @@ export default function QueuePage() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'MANUAL_REVIEW' | 'PASS' | 'BLOCK' | 'PENDING'>('ALL');
+  const [includeDemo, setIncludeDemo] = useState(true);
 
   const fetchCases = async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.getCases();
+      const data = await api.getCases(includeDemo);
       setCases(data);
     } catch (err: any) {
       setError(err.message || 'Failed to connect to backend server.');
@@ -42,7 +44,7 @@ export default function QueuePage() {
 
   useEffect(() => {
     fetchCases();
-  }, []);
+  }, [includeDemo]);
 
   const passCount = useMemo(() => cases.filter((c) => c.recommendation === 'PASS').length, [cases]);
   const reviewCount = useMemo(() => cases.filter((c) => c.recommendation === 'MANUAL_REVIEW').length, [cases]);
@@ -56,17 +58,57 @@ export default function QueuePage() {
       if (statusFilter === 'BLOCK' && c.recommendation !== 'BLOCK') return false;
       if (statusFilter === 'PENDING' && c.recommendation) return false;
 
+      if (!includeDemo && (c.is_demo || c.source_mode === 'DEMO')) return false;
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const refMatch = c.case_reference.toLowerCase().includes(q);
         const nameMatch = c.supplier_name.toLowerCase().includes(q);
         const invMatch = c.invoice_number?.toLowerCase().includes(q);
+        const gstinMatch = c.gstin_claim?.toLowerCase().includes(q);
         const idMatch = c.case_id.toLowerCase().includes(q);
-        return refMatch || nameMatch || invMatch || idMatch;
+        return refMatch || nameMatch || invMatch || gstinMatch || idMatch;
       }
       return true;
     });
-  }, [cases, statusFilter, searchQuery]);
+  }, [cases, statusFilter, includeDemo, searchQuery]);
+
+  const exportCsv = () => {
+    const headers = [
+      'Case Reference',
+      'Case ID',
+      'Supplier Name',
+      'GSTIN Claim',
+      'Invoice Number',
+      'Gross Amount (INR)',
+      'Recommendation',
+      'Policy Index Score',
+      'Review Status',
+      'Is Demo',
+      'Created At'
+    ];
+    const rows = filteredCases.map((c) => [
+      `"${c.case_reference}"`,
+      `"${c.case_id}"`,
+      `"${(c.supplier_name || '').replace(/"/g, '""')}"`,
+      `"${c.gstin_claim || ''}"`,
+      `"${c.invoice_number || ''}"`,
+      c.total_amount || 0,
+      c.recommendation || 'PENDING',
+      c.risk_score ?? '',
+      c.review_status || 'AWAITING_REVIEW',
+      c.is_demo || c.source_mode === 'DEMO' ? 'YES' : 'NO',
+      `"${c.created_at || ''}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `VendorShield_Queue_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 animate-reveal-up">
@@ -93,7 +135,17 @@ export default function QueuePage() {
           </p>
         </div>
 
-        <div className="flex items-center space-x-2.5 shrink-0">
+        <div className="flex items-center space-x-2.5 shrink-0 flex-wrap">
+          <button
+            onClick={exportCsv}
+            disabled={filteredCases.length === 0}
+            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors shadow-subtle disabled:opacity-50"
+            title="Download CSV of current queue"
+          >
+            <Download className="h-3.5 w-3.5 text-zinc-400" />
+            <span>Export CSV</span>
+          </button>
+
           <button
             onClick={fetchCases}
             disabled={loading}
@@ -113,7 +165,7 @@ export default function QueuePage() {
         </div>
       </div>
 
-      {/* Metrics Row — Clean Scanning with Semantic Accents */}
+      {/* Metrics Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Metric 1: Total */}
         <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-xl p-4 shadow-subtle">
@@ -154,7 +206,7 @@ export default function QueuePage() {
           <div className="text-2xl sm:text-3xl font-bold text-amber-700 dark:text-amber-400 mt-2 tabular-nums">
             {reviewCount}
           </div>
-          <div className="text-[11px] text-zinc-400 mt-1">Discrepancy / first-time vendor</div>
+          <div className="text-[11px] text-zinc-400 mt-1">Fails closed (Requires Registry/Signoff)</div>
         </div>
 
         {/* Metric 4: Block */}
@@ -168,12 +220,12 @@ export default function QueuePage() {
           <div className="text-2xl sm:text-3xl font-bold text-rose-700 dark:text-rose-400 mt-2 tabular-nums">
             {blockCount}
           </div>
-          <div className="text-[11px] text-zinc-400 mt-1">Payment release halted</div>
+          <div className="text-[11px] text-zinc-400 mt-1">Confirmed defects or cancelled GST</div>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-xl p-3 shadow-subtle flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-xl p-3 shadow-subtle flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         {/* Search Input */}
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
@@ -195,29 +247,42 @@ export default function QueuePage() {
           )}
         </div>
 
-        {/* Status Filter Buttons */}
-        <div className="flex items-center space-x-1 border border-zinc-200 dark:border-zinc-800 rounded-lg p-0.5 bg-zinc-50 dark:bg-zinc-900/40 text-xs shrink-0">
-          {(['ALL', 'PASS', 'MANUAL_REVIEW', 'BLOCK', 'PENDING'] as const).map((status) => (
-            <button
-              key={status}
-              onClick={() => setStatusFilter(status)}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                statusFilter === status
-                  ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'
-              }`}
-            >
-              {status === 'ALL'
-                ? `All (${cases.length})`
-                : status === 'PASS'
-                ? `Pass (${passCount})`
-                : status === 'MANUAL_REVIEW'
-                ? `Review (${reviewCount})`
-                : status === 'BLOCK'
-                ? `Block (${blockCount})`
-                : `Pending (${pendingCount})`}
-            </button>
-          ))}
+        {/* Demo Cases Toggle & Status Filter */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <label className="inline-flex items-center space-x-1.5 text-xs text-zinc-600 dark:text-zinc-400 cursor-pointer select-none px-2 py-1 border border-zinc-200 dark:border-zinc-800 rounded-lg bg-zinc-50 dark:bg-zinc-900/40">
+            <input
+              type="checkbox"
+              checked={includeDemo}
+              onChange={(e) => setIncludeDemo(e.target.checked)}
+              className="rounded border-zinc-300 text-teal-600 focus:ring-teal-500 h-3.5 w-3.5"
+            />
+            <span>Show Demo Cases</span>
+          </label>
+
+          {/* Status Filter Buttons */}
+          <div className="flex items-center space-x-1 border border-zinc-200 dark:border-zinc-800 rounded-lg p-0.5 bg-zinc-50 dark:bg-zinc-900/40 text-xs shrink-0">
+            {(['ALL', 'PASS', 'MANUAL_REVIEW', 'BLOCK', 'PENDING'] as const).map((status) => (
+              <button
+                key={status}
+                onClick={() => setStatusFilter(status)}
+                className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                  statusFilter === status
+                    ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'
+                }`}
+              >
+                {status === 'ALL'
+                  ? `All (${cases.length})`
+                  : status === 'PASS'
+                  ? `Pass (${passCount})`
+                  : status === 'MANUAL_REVIEW'
+                  ? `Review (${reviewCount})`
+                  : status === 'BLOCK'
+                  ? `Block (${blockCount})`
+                  : `Pending (${pendingCount})`}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -238,8 +303,8 @@ export default function QueuePage() {
                 <th className="py-3 px-4">Supplier Identity</th>
                 <th className="py-3 px-4">Invoice / Amount</th>
                 <th className="py-3 px-4">Recommendation</th>
-                <th className="py-3 px-4">Risk Score</th>
-                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4">Policy Index</th>
+                <th className="py-3 px-4">Review Status</th>
                 <th className="py-3 px-4 text-right">Action</th>
               </tr>
             </thead>
@@ -258,12 +323,13 @@ export default function QueuePage() {
                   <td colSpan={7} className="py-14 text-center text-zinc-400 text-xs">
                     <div className="space-y-1">
                       <p className="font-medium text-zinc-600 dark:text-zinc-300">No matching dossiers found</p>
-                      <p className="text-[11px]">Try adjusting your search query or status filter.</p>
+                      <p className="text-[11px]">Try adjusting your search query, demo toggle, or status filter.</p>
                     </div>
                   </td>
                 </tr>
               ) : (
                 filteredCases.map((c) => {
+                  const isCaseDemo = c.is_demo || c.source_mode === 'DEMO';
                   return (
                     <tr
                       key={c.case_id}
@@ -271,12 +337,19 @@ export default function QueuePage() {
                     >
                       {/* Reference */}
                       <td className="py-3.5 px-4">
-                        <Link
-                          href={`/cases/${c.case_id}`}
-                          className="font-mono text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline block"
-                        >
-                          {c.case_reference}
-                        </Link>
+                        <div className="flex items-center space-x-1.5">
+                          <Link
+                            href={`/cases/${c.case_id}`}
+                            className="font-mono text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline block"
+                          >
+                            {c.case_reference}
+                          </Link>
+                          {isCaseDemo && (
+                            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-500 border border-amber-500/30 font-semibold">
+                              DEMO DATA
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-zinc-400">
                           {c.created_at ? new Date(c.created_at).toLocaleDateString() : 'Recent'}
                         </span>
@@ -327,7 +400,7 @@ export default function QueuePage() {
                         )}
                       </td>
 
-                      {/* Risk Score */}
+                      {/* Risk Score / Policy Index */}
                       <td className="py-3.5 px-4">
                         {c.risk_score !== undefined && c.risk_score !== null ? (
                           <div className="flex items-center space-x-2">

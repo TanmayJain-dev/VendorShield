@@ -249,6 +249,7 @@ export interface Case {
   file_sha256?: string;
   duplicate_of_case_id?: string;
   duplicate_type?: string;
+  is_demo?: boolean;
   invoice?: InvoiceClaim;
   evidence_items: EvidenceItem[];
   assessment?: RiskAssessment;
@@ -270,6 +271,7 @@ export interface CaseSummary {
   review_status?: string;
   gstin_claim?: string;
   duplicate_type?: string;
+  is_demo?: boolean;
   created_at: string;
 }
 
@@ -332,4 +334,30 @@ export interface AuditVerifyResponse {
   broken_event_id?: string | null;
   broken_event_index?: number | null;
   detail: string;
+}
+
+
+export interface Gstr2bEntry {
+  entry_id?: string;
+  return_period: string;
+  buyer_gstin: string;
+  supplier_gstin: string;
+  supplier_name?: string;
+  invoice_number: string;
+  invoice_date?: string;
+  invoice_value?: number;
+  taxable_value?: number;
+  igst?: number;
+  cgst?: number;
+  sgst?: number;
+  cess?: number;
+  itc_available?: boolean;
+}
+
+export interface Gstr2bImportResponse {
+  message: string;
+  total_records: number;
+  imported_records: number;
+  buyer_gstin?: string;
+  return_period?: string;
 }

@@ -12,30 +12,33 @@ import {
   AlertCircle,
   X,
   ArrowLeft,
-  ShieldCheck,
   ShieldAlert,
-  Sparkles,
-  Info
+  ChevronDown,
+  Info,
+  Files
 } from 'lucide-react';
 
 export default function IntakePage() {
   const router = useRouter();
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [supplierName, setSupplierName] = useState('Apex Courier');
-  const [gstin, setGstin] = useState('07AAAAA0000A1Z4');
-  const [invoiceNumber, setInvoiceNumber] = useState('INV-2026-8841');
-  const [totalAmount, setTotalAmount] = useState('482500.00');
+  const [supplierName, setSupplierName] = useState('');
+  const [gstin, setGstin] = useState('');
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [totalAmount, setTotalAmount] = useState('');
+  const [isDemo, setIsDemo] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [progressMsg, setProgressMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selectedScenario, setSelectedScenario] = useState<'benchmark' | 'ghost' | null>('benchmark');
+  const [presetsOpen, setPresetsOpen] = useState(false);
 
   const loadBenchmarkPreset = () => {
     setSupplierName('Apex Courier');
     setGstin('07AAAAA0000A1Z4');
     setInvoiceNumber('INV-2026-8841');
     setTotalAmount('482500.00');
-    setSelectedScenario('benchmark');
+    setIsDemo(true);
+    setFiles([]);
   };
 
   const loadGhostVendorPreset = () => {
@@ -43,7 +46,8 @@ export default function IntakePage() {
     setGstin('07AAAAA0000A1Z4');
     setInvoiceNumber('INV-2026-8842');
     setTotalAmount('295000.00');
-    setSelectedScenario('ghost');
+    setIsDemo(true);
+    setFiles([]);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -58,29 +62,86 @@ export default function IntakePage() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const droppedFiles = Array.from(e.dataTransfer.files).filter(f =>
+        f.name.match(/\.(pdf|png|jpe?g)$/i)
+      );
+      if (droppedFiles.length === 0) {
+        setError('Only PDF, PNG, or JPEG files are accepted.');
+        return;
+      }
+      setFiles(prev => [...prev, ...droppedFiles]);
+      setIsDemo(false);
     }
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const selected = Array.from(e.target.files).filter(f =>
+        f.name.match(/\.(pdf|png|jpe?g)$/i)
+      );
+      setFiles(prev => [...prev, ...selected]);
+      setIsDemo(false);
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setProgressMsg(null);
 
     try {
-      const formData = new FormData();
-      if (file) formData.append('file', file);
-      formData.append('supplier_name', supplierName);
-      formData.append('gstin', gstin);
-      formData.append('invoice_number', invoiceNumber);
-      formData.append('total_amount', totalAmount);
+      if (files.length > 0) {
+        // Multi-file or single file upload flow
+        const createdCaseIds: string[] = [];
+        for (let i = 0; i < files.length; i++) {
+          const currentFile = files[i];
+          setProgressMsg(`Processing file ${i + 1} of ${files.length}: ${currentFile.name}...`);
+          
+          const meta = files.length === 1 ? {
+            supplier_name: supplierName.trim() || undefined,
+            gstin: gstin.trim() ? gstin.trim().toUpperCase() : undefined,
+            invoice_number: invoiceNumber.trim() || undefined,
+            total_amount: totalAmount ? parseFloat(totalAmount) : undefined,
+            is_demo: isDemo
+          } : {
+            is_demo: isDemo
+          };
 
-      const createdCase = await api.createCase(formData);
-      router.push(`/cases/${createdCase.case_id}`);
+          const created = await api.uploadInvoice(currentFile, meta);
+          createdCaseIds.push(created.case_id);
+        }
+
+        if (createdCaseIds.length === 1) {
+          router.push(`/cases/${createdCaseIds[0]}`);
+        } else {
+          router.push('/queue');
+        }
+      } else {
+        // Manual entry intake (no file attached)
+        if (!supplierName.trim()) {
+          throw new Error('Please attach an invoice file or provide at least a Supplier Name.');
+        }
+
+        const formData = new FormData();
+        formData.append('supplier_name', supplierName.trim());
+        if (gstin.trim()) formData.append('gstin', gstin.trim().toUpperCase());
+        if (invoiceNumber.trim()) formData.append('invoice_number', invoiceNumber.trim());
+        if (totalAmount) formData.append('total_amount', totalAmount);
+        formData.append('is_demo', String(isDemo));
+
+        const createdCase = await api.createCase(formData);
+        router.push(`/cases/${createdCase.case_id}`);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to submit invoice intake.');
       setLoading(false);
+      setProgressMsg(null);
     }
   };
 
@@ -90,7 +151,7 @@ export default function IntakePage() {
     return `₹${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   })();
 
-  const isGstinFormatValid = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstin);
+  const isGstinFormatValid = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstin.trim());
 
   return (
     <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 animate-reveal-up">
@@ -104,68 +165,79 @@ export default function IntakePage() {
             <ArrowLeft className="h-3.5 w-3.5" />
             <span>Back to Cases Queue</span>
           </Link>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Supplier Invoice Intake
-          </h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+              Supplier Invoice Intake
+            </h1>
+            {isDemo && (
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-500 border border-amber-500/30 font-semibold">
+                DEMO DATA
+              </span>
+            )}
+          </div>
           <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1 max-w-xl leading-relaxed">
-            Extract claims from an accounts payable invoice or populate details manually for autonomous due-diligence verification.
+            Upload accounts payable invoices (PDF, PNG, JPEG) for multi-layer extraction (QR, Text, LLM) or populate claims for autonomous due-diligence verification.
           </p>
         </div>
 
-        {/* Preset Scenarios Card */}
-        <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-xl p-4 sm:p-5 space-y-3 shadow-subtle">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
-              Benchmark Verification Presets
-            </span>
-            <span className="text-[11px] text-zinc-400 font-mono">1-Click Evaluation Scenarios</span>
-          </div>
+        {/* Collapsible Demo Presets Section */}
+        <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-zinc-50/50 dark:bg-zinc-900/20">
+          <button
+            type="button"
+            onClick={() => setPresetsOpen(!presetsOpen)}
+            className="w-full px-4 py-3 flex items-center justify-between text-left text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100/60 dark:hover:bg-zinc-800/40 transition"
+          >
+            <div className="flex items-center space-x-2">
+              <span className="px-1.5 py-0.5 text-[10px] font-mono font-bold rounded bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800">
+                DEMO DATA
+              </span>
+              <span>Demo Scenarios (Synthetic Benchmark Fixtures)</span>
+            </div>
+            <ChevronDown className={`h-4 w-4 text-zinc-400 transition-transform ${presetsOpen ? 'rotate-180' : ''}`} />
+          </button>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Scenario 1: Apex Courier Benchmark */}
-            <button
-              type="button"
-              onClick={loadBenchmarkPreset}
-              className={`p-3.5 text-left rounded-xl border text-xs transition-all ${
-                selectedScenario === 'benchmark'
-                  ? 'border-teal-600 dark:border-teal-500 bg-teal-50/50 dark:bg-teal-950/30 ring-1 ring-teal-500/30'
-                  : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
-              }`}
-            >
-              <div className="flex items-center justify-between font-bold text-zinc-900 dark:text-zinc-100">
-                <span className="font-mono">INV-2026-8841</span>
-                <span className="text-[11px] font-mono font-bold text-teal-700 dark:text-teal-400">₹4,82,500</span>
-              </div>
-              <div className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 mt-1">
-                Apex Courier Pvt Ltd
-              </div>
-              <div className="text-[10.5px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                Active GSTIN with trade alias discrepancy (Manual Review).
-              </div>
-            </button>
+          {presetsOpen && (
+            <div className="p-4 pt-1 border-t border-zinc-200 dark:border-zinc-800 space-y-3 bg-white dark:bg-[#0e1420]">
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                Select a preset synthetic scenario for offline evaluation without uploading a real PDF invoice.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={loadBenchmarkPreset}
+                  className="p-3 text-left rounded-lg border border-zinc-200 dark:border-zinc-800 hover:border-teal-500 dark:hover:border-teal-500 hover:bg-teal-50/30 dark:hover:bg-teal-950/20 transition-all text-xs"
+                >
+                  <div className="flex items-center justify-between font-bold text-zinc-900 dark:text-zinc-100">
+                    <span className="font-mono">INV-2026-8841</span>
+                    <span className="text-[11px] font-mono text-teal-600 dark:text-teal-400">₹4,82,500</span>
+                  </div>
+                  <div className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 mt-1">
+                    Apex Courier Pvt Ltd
+                  </div>
+                  <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    Active GSTIN with trade alias discrepancy (Manual Review).
+                  </div>
+                </button>
 
-            {/* Scenario 2: Specter Cloud Ghost Vendor */}
-            <button
-              type="button"
-              onClick={loadGhostVendorPreset}
-              className={`p-3.5 text-left rounded-xl border text-xs transition-all ${
-                selectedScenario === 'ghost'
-                  ? 'border-rose-600 dark:border-rose-500 bg-rose-50/50 dark:bg-rose-950/30 ring-1 ring-rose-500/30'
-                  : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
-              }`}
-            >
-              <div className="flex items-center justify-between font-bold text-zinc-900 dark:text-zinc-100">
-                <span className="font-mono">INV-2026-8842</span>
-                <span className="text-[11px] font-mono font-bold text-rose-700 dark:text-rose-400">₹2,95,000</span>
+                <button
+                  type="button"
+                  onClick={loadGhostVendorPreset}
+                  className="p-3 text-left rounded-lg border border-zinc-200 dark:border-zinc-800 hover:border-rose-500 dark:hover:border-rose-500 hover:bg-rose-50/30 dark:hover:bg-rose-950/20 transition-all text-xs"
+                >
+                  <div className="flex items-center justify-between font-bold text-zinc-900 dark:text-zinc-100">
+                    <span className="font-mono">INV-2026-8842</span>
+                    <span className="text-[11px] font-mono text-rose-600 dark:text-rose-400">₹2,95,000</span>
+                  </div>
+                  <div className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 mt-1">
+                    Specter Cloud Technologies
+                  </div>
+                  <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    Ghost vendor with zero public registry footprint (Critical Block).
+                  </div>
+                </button>
               </div>
-              <div className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 mt-1">
-                Specter Cloud Technologies
-              </div>
-              <div className="text-[10.5px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                Ghost vendor with zero public registry footprint (Critical Block).
-              </div>
-            </button>
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Error Alert */}
@@ -178,184 +250,199 @@ export default function IntakePage() {
 
         {/* Main Intake Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Dropzone */}
+          {/* Multi-file Dropzone */}
           <div
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
+            className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center transition-all ${
               isDragging
                 ? 'border-teal-500 bg-teal-50/30 dark:bg-teal-950/30 scale-[1.01]'
                 : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#0e1420] shadow-subtle'
             }`}
           >
-            {file ? (
-              <div className="flex items-center justify-center space-x-3">
-                <div className="w-10 h-10 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center">
-                  <FileText className="h-5 w-5" />
-                </div>
-                <div className="text-left text-xs">
-                  <div className="font-semibold text-zinc-900 dark:text-zinc-100">{file.name}</div>
-                  <div className="text-[11px] text-zinc-400 font-mono">{(file.size / 1024).toFixed(1)} KB &bull; Attached</div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setFile(null)}
-                  className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ml-3"
-                  aria-label="Remove attached file"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+            <div className="flex flex-col items-center justify-center space-y-2">
+              <div className="w-12 h-12 rounded-full bg-teal-50 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400 flex items-center justify-center mb-1">
+                <UploadCloud className="h-6 w-6" />
               </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="w-12 h-12 rounded-xl bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 mx-auto flex items-center justify-center">
-                  <UploadCloud className="h-6 w-6 stroke-[1.8]" />
+              <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+                Drag and drop vendor invoice files here
+              </div>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                Supports PDF (native e-invoice QR or scanned), PNG, JPG, or JPEG. Multi-file batch intake enabled.
+              </p>
+              <label className="mt-2 inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 cursor-pointer hover:bg-teal-100/50 transition">
+                <Files className="h-3.5 w-3.5" />
+                <span>Browse Files</span>
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,.png,.jpg,.jpeg"
+                  onChange={handleFileInput}
+                  className="hidden"
+                />
+              </label>
+            </div>
+
+            {/* Selected Files List */}
+            {files.length > 0 && (
+              <div className="mt-5 border-t border-zinc-200 dark:border-zinc-800 pt-4 space-y-2 text-left">
+                <div className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
+                  <span>Attached Invoices ({files.length})</span>
+                  <button
+                    type="button"
+                    onClick={() => setFiles([])}
+                    className="text-[10px] text-rose-500 hover:underline"
+                  >
+                    Clear All
+                  </button>
                 </div>
-                <div className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
-                  Drop vendor invoice PDF here, or{' '}
-                  <label className="text-teal-600 dark:text-teal-400 hover:underline cursor-pointer font-bold">
-                    browse files
-                    <input
-                      type="file"
-                      accept=".pdf,.png,.jpg,.jpeg"
-                      onChange={(e) => e.target.files && setFile(e.target.files[0])}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-                <div className="text-[11px] text-zinc-400">
-                  Supports PDF documents, TIFF, or image scans up to 10MB
+                <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                  {files.map((f, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between p-2 rounded-lg bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 text-xs"
+                    >
+                      <div className="flex items-center space-x-2 truncate">
+                        <FileText className="h-4 w-4 text-teal-600 shrink-0" />
+                        <span className="font-mono text-zinc-800 dark:text-zinc-200 truncate">{f.name}</span>
+                        <span className="text-[10px] text-zinc-400 font-mono">({(f.size / 1024).toFixed(1)} KB)</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(i)}
+                        className="p-1 text-zinc-400 hover:text-rose-500 transition"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Claim Input Fields Card */}
-          <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-xl p-5 sm:p-6 space-y-4 shadow-subtle">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800/80 text-xs">
-              <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                Invoice Claim Parameters
-              </span>
-              <span className="text-[11px] text-zinc-400">Extracted or declared values</span>
+          {/* Optional Claims Metadata / Manual Intake Section */}
+          <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-xl p-5 space-y-4 shadow-subtle">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+                  {files.length > 0 ? 'Pre-extraction Overrides (Optional)' : 'Manual Invoice Claims Intake'}
+                </h3>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                  {files.length > 0
+                    ? 'Leave blank to let the pipeline extract fields automatically from the uploaded file.'
+                    : 'Enter invoice claims manually for evaluation when no physical file is available.'}
+                </p>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              {/* Supplier Name */}
-              <div className="space-y-1">
-                <label className="block text-zinc-700 dark:text-zinc-300 font-medium">
-                  Supplier Trade Name <span className="text-rose-500">*</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                  Supplier / Vendor Name {files.length === 0 && <span className="text-rose-500">*</span>}
                 </label>
                 <input
                   type="text"
-                  required
                   value={supplierName}
-                  onChange={(e) => {
-                    setSupplierName(e.target.value);
-                    setSelectedScenario(null);
-                  }}
-                  className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-teal-500 font-medium text-xs transition-colors"
-                  placeholder="e.g. Apex Courier"
+                  onChange={(e) => setSupplierName(e.target.value)}
+                  placeholder="e.g. Apex Courier Pvt Ltd"
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-teal-500"
                 />
               </div>
 
-              {/* GSTIN */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="block text-zinc-700 dark:text-zinc-300 font-medium">
-                    Supplier GSTIN <span className="text-rose-500">*</span>
-                  </label>
-                  <span className="text-[10px] text-zinc-400 font-mono">
-                    {gstin.length}/15
-                  </span>
-                </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                  Supplier GSTIN (15 characters)
+                </label>
                 <div className="relative">
                   <input
                     type="text"
-                    maxLength={15}
                     value={gstin}
-                    onChange={(e) => {
-                      setGstin(e.target.value.toUpperCase());
-                      setSelectedScenario(null);
-                    }}
-                    className="w-full px-3 py-2 font-mono uppercase bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-teal-500 font-semibold text-xs transition-colors"
-                    placeholder="07AAAAA0000A1Z4"
+                    onChange={(e) => setGstin(e.target.value.toUpperCase())}
+                    placeholder="e.g. 07AAAAA0000A1Z4"
+                    maxLength={15}
+                    className="w-full px-3 py-2 text-xs font-mono uppercase rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-teal-500"
                   />
-                  {gstin.length === 15 && (
-                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                  {gstin && (
+                    <div className="absolute right-2.5 top-2.5">
                       {isGstinFormatValid ? (
-                        <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Valid Format</span>
+                        <Check className="h-3.5 w-3.5 text-emerald-500" />
                       ) : (
-                        <span className="text-[10px] font-semibold text-rose-600 dark:text-rose-400">Invalid Format</span>
+                        <span className="text-[10px] text-amber-500 font-mono">Format Invalid</span>
                       )}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Invoice Number */}
-              <div className="space-y-1">
-                <label className="block text-zinc-700 dark:text-zinc-300 font-medium">
-                  Invoice Number <span className="text-rose-500">*</span>
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                  Invoice Number
                 </label>
                 <input
                   type="text"
-                  required
                   value={invoiceNumber}
-                  onChange={(e) => {
-                    setInvoiceNumber(e.target.value);
-                    setSelectedScenario(null);
-                  }}
-                  className="w-full px-3 py-2 font-mono bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-teal-500 font-medium text-xs transition-colors"
-                  placeholder="INV-2026-8841"
+                  onChange={(e) => setInvoiceNumber(e.target.value)}
+                  placeholder="e.g. INV-2026-8841"
+                  className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-teal-500"
                 />
               </div>
 
-              {/* Total Amount */}
-              <div className="space-y-1">
-                <label className="block text-zinc-700 dark:text-zinc-300 font-medium">
-                  Total Payable Amount (INR) <span className="text-rose-500">*</span>
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                  Gross Invoice Amount (INR)
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-zinc-400 text-xs">
-                    ₹
-                  </span>
                   <input
                     type="number"
                     step="0.01"
-                    required
                     value={totalAmount}
-                    onChange={(e) => {
-                      setTotalAmount(e.target.value);
-                      setSelectedScenario(null);
-                    }}
-                    className="w-full pl-7 pr-3 py-2 font-mono bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-teal-500 font-semibold text-xs tabular-nums transition-colors"
-                    placeholder="482500.00"
+                    onChange={(e) => setTotalAmount(e.target.value)}
+                    placeholder="e.g. 482500.00"
+                    className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-teal-500"
                   />
-                </div>
-                <div className="text-[10.5px] text-zinc-400 text-right tabular-nums">
-                  Formatted: <strong className="text-zinc-700 dark:text-zinc-300">{formattedAmount}</strong>
+                  {totalAmount && (
+                    <span className="absolute right-3 top-2 text-[11px] font-mono text-zinc-400">
+                      {formattedAmount}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Form Actions */}
-          <div className="flex items-center justify-between pt-2">
+          {/* Progress message during batch upload */}
+          {progressMsg && (
+            <div className="p-3 rounded-lg bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 text-xs text-teal-800 dark:text-teal-300 font-mono flex items-center space-x-2">
+              <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
+              <span>{progressMsg}</span>
+            </div>
+          )}
+
+          {/* Submit Action */}
+          <div className="flex items-center justify-end space-x-3 pt-2">
             <Link
               href="/queue"
-              className="text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors"
+              className="px-4 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition"
             >
-              Cancel and Return
+              Cancel
             </Link>
-
             <button
               type="submit"
-              disabled={loading}
-              className="group inline-flex items-center space-x-2 px-5 py-2.5 rounded-lg text-xs font-semibold text-white bg-teal-700 hover:bg-teal-600 dark:bg-teal-600 dark:hover:bg-teal-500 transition-all duration-200 shadow-sm hover:shadow-teal-500/20 active:scale-95 disabled:opacity-50"
+              disabled={loading || (files.length === 0 && !supplierName.trim())}
+              className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-lg text-xs font-semibold text-white bg-teal-700 hover:bg-teal-600 dark:bg-teal-600 dark:hover:bg-teal-500 transition shadow-sm hover:shadow-teal-500/20 disabled:opacity-50 active:scale-95"
             >
-              <span>{loading ? 'Ingesting Claims...' : 'Proceed to Dossier'}</span>
-              <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+              <span>
+                {loading
+                  ? 'Processing Intake...'
+                  : files.length > 1
+                  ? `Upload & Ingest ${files.length} Invoices`
+                  : files.length === 1
+                  ? 'Upload & Ingest Invoice'
+                  : 'Create Verification Case'}
+              </span>
+              <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>
         </form>

@@ -654,7 +654,7 @@ export default function HomePage() {
                     INV-2026-8841
                   </span>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
-                    BENCHMARK SIMULATION
+                    ILLUSTRATIVE EXAMPLE (DEMO DATA)
                   </span>
                 </div>
                 <div className="text-xs text-zinc-500 dark:text-zinc-400">

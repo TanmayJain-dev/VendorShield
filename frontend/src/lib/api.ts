@@ -7,7 +7,8 @@ import {
   AuditEvent,
   ManualGstinEvidenceRequest,
   ExplainVerdictResponse,
-  AuditVerifyResponse
+  AuditVerifyResponse,
+  Gstr2bImportResponse
 } from '../types/api';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
@@ -193,5 +194,20 @@ export const api = {
 
   async getAuditReport(caseId: string): Promise<string> {
     return this.downloadReport(caseId);
+  },
+  async importGstr2b(file: File): Promise<Gstr2bImportResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (typeof window !== 'undefined') {
+      const token = sessionStorage.getItem('vendorshield_token') || 'dev-reviewer-token';
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+    }
+    const res = await fetch(`${API_BASE_URL}/gstr2b/import`, {
+      method: 'POST',
+      headers,
+      body: formData
+    });
+    return handleResponse<Gstr2bImportResponse>(res);
   }
 };

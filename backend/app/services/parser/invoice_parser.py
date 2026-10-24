@@ -123,11 +123,28 @@ def clean_amount(val_str: Optional[str]) -> float:
         return 0.0
 
 
+class ExtractedPdfText(str):
+    """
+    Polymorphic string that behaves identically to str for text-processing and assertions,
+    while also unpacking into a 4-tuple (text, is_scanned_image, ocr_status_message, parsing_errors)
+    for caller convenience.
+    """
+    def __new__(cls, text: str, is_scanned: bool = False, ocr_message: Optional[str] = None, errors: Optional[List[str]] = None):
+        instance = super().__new__(cls, text)
+        instance.is_scanned = is_scanned
+        instance.ocr_message = ocr_message
+        instance.errors = list(errors or [])
+        return instance
+
+    def __iter__(self):
+        return iter((str(self), self.is_scanned, self.ocr_message, self.errors))
+
+
 def extract_text_from_pdf_bytes(pdf_bytes: bytes, return_details: bool = False):
     """
     Extracts text using PyMuPDF (fitz) or falls back to OCR if scanned.
-    When return_details is True, returns (text, is_scanned, ocr_msg, errors).
-    Otherwise, returns text: str.
+    Returns an ExtractedPdfText instance that behaves as a str and also unpacks
+    as (text, is_scanned, ocr_status_message, errors).
     """
     errors: List[str] = []
     text = ""
@@ -143,9 +160,7 @@ def extract_text_from_pdf_bytes(pdf_bytes: bytes, return_details: bool = False):
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         if doc.page_count > 25:
             errors.append(f"PDF exceeds maximum page limit of 25 (detected {doc.page_count} pages)")
-            if return_details:
-                return "", False, None, errors
-            return "Extraction error: PDF exceeds maximum page limit of 25"
+            return ExtractedPdfText("Extraction error: PDF exceeds maximum page limit of 25", False, None, errors)
 
         for page in doc:
             page_text = page.get_text()
@@ -165,22 +180,17 @@ def extract_text_from_pdf_bytes(pdf_bytes: bytes, return_details: bool = False):
                 )
 
         doc.close()
-        if return_details:
-            return text, is_scanned_image, ocr_status_message, errors
-        return text
+        return ExtractedPdfText(text, is_scanned_image, ocr_status_message, errors)
 
     except Exception as e:
         err_msg = f"Extraction error: {str(e)}"
         errors.append(err_msg)
         try:
             fallback_text = pdf_bytes.decode("utf-8", errors="ignore")
-            if return_details:
-                return fallback_text, False, None, errors
-            return fallback_text if len(fallback_text.strip()) > 0 else err_msg
+            ret = fallback_text if len(fallback_text.strip()) > 0 else err_msg
+            return ExtractedPdfText(ret, False, None, errors)
         except Exception:
-            if return_details:
-                return "", False, None, errors
-            return err_msg
+            return ExtractedPdfText(err_msg, False, None, errors)
 
 
 def extract_tables_from_pdf(pdf_bytes: bytes) -> List[LineItem]:

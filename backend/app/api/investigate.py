@@ -1,33 +1,38 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
+
 from ..schemas.case import Case
 from ..schemas.enums import CaseStatus
-from .cases import case_store
+from ..db.database import get_db
+from ..db.repository import CaseRepository
 from ..services.tinyfish.orchestrator import MultiHopTinyFishOrchestrator
 from ..services.reconciler.evidence_reconciler import EvidenceReconciler
 from ..services.rules.forensic_engine import ForensicRiskEngine
 from ..services.audit.trail import AuditTrailService
+from ..config import settings
 
 router = APIRouter(prefix="/cases", tags=["investigation"])
 
-orchestrator = MultiHopTinyFishOrchestrator()
+orchestrator = MultiHopTinyFishOrchestrator(api_key=settings.TINYFISH_API_KEY)
 reconciler = EvidenceReconciler()
 forensic_engine = ForensicRiskEngine()
 audit_service = AuditTrailService()
 
 @router.post("/{case_id}/investigate", response_model=Case)
-async def run_investigation(case_id: str):
+async def run_investigation(case_id: str, db: Session = Depends(get_db)):
     """
     VendorShield 2.0: Triggers 4-hop autonomous forensic investigation via TinyFish:
     - Hop 1: Entity & Constitution Verification (GSTN/MCA)
     - Hop 2: Director Portfolio & Shell Contagion Traversal
     - Hop 3: Geolocation Grounding & Ghost Hub Detection
     - Hop 4: Regulatory & NCLT Insolvency Sweep
-    Evaluates the 5-Vector Forensic Risk Topology & Direct ₹ ITC Clawback Exposure.
+    Evaluates the 5-Vector Forensic Risk Topology & Direct ₹ ITC Clawback Exposure,
+    reconciles evidence, updates the persistent database and audit trail.
     """
-    if case_id not in case_store:
+    case = CaseRepository.get_case(db, case_id)
+    if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     
-    case = case_store[case_id]
     if not case.invoice:
         raise HTTPException(status_code=400, detail="Invoice claims missing")
 
@@ -61,5 +66,26 @@ async def run_investigation(case_id: str):
     case.status = CaseStatus.READY_FOR_REVIEW
     case.audit_hash_sha256 = audit_service.compute_case_hash(case)
 
-    return case
+    # 5. Persist to DB
+    saved_case = CaseRepository.save_case(db, case)
 
+    # 6. Record append-only audit event
+    CaseRepository.add_audit_event(
+        db=db,
+        case_id=case_id,
+        event_type="INVESTIGATION_COMPLETED",
+        actor="system",
+        actor_role="research_agent",
+        event_data={
+            "evidence_count": len(evidence_items),
+            "source_mode": case.source_mode.value,
+            "recommendation": assessment.recommendation.value,
+            "risk_score": assessment.risk_score,
+            "rules_triggered": [r.rule_id for r in assessment.triggered_rules] if hasattr(assessment, "triggered_rules") else [],
+            "hard_gates": assessment.hard_gates_triggered,
+            "audit_hash": case.audit_hash_sha256
+        },
+        ruleset_version=assessment.ruleset_version
+    )
+
+    return saved_case

@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
-import { Case, ReviewActionType } from '../../../types/api';
+import { Case, ReviewActionType, InvoiceCorrection } from '../../../types/api';
 import { 
   ShieldAlert, 
   CheckCircle2, 
@@ -11,9 +11,12 @@ import {
   ExternalLink, 
   RefreshCw, 
   Download, 
-  FileCheck, 
   Lock,
-  Cpu
+  Cpu,
+  Edit3,
+  Copy,
+  History,
+  Info
 } from 'lucide-react';
 
 export default function CaseDossierPage({ params }: { params: Promise<{ id: string }> }) {
@@ -24,19 +27,37 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
   const [loading, setLoading] = useState(true);
   const [investigating, setInvestigating] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Review Form State
   const [reviewerId, setReviewerId] = useState('analyst_prachi');
   const [reviewAction, setReviewAction] = useState<ReviewActionType>('APPROVE_WITH_EXCEPTION');
   const [rationale, setRationale] = useState('');
-  const [reviewSuccess, setReviewSuccess] = useState(false);
+
+  // Correction Form State
+  const [corrSupplier, setCorrSupplier] = useState('');
+  const [corrLegalName, setCorrLegalName] = useState('');
+  const [corrGstin, setCorrGstin] = useState('');
+  const [corrInvNumber, setCorrInvNumber] = useState('');
+  const [corrTotalAmount, setCorrTotalAmount] = useState('');
+  const [corrTaxableAmount, setCorrTaxableAmount] = useState('');
+  const [corrNotes, setCorrNotes] = useState('');
 
   const fetchCase = async () => {
     setLoading(true);
     try {
       const data = await api.getCase(caseId);
       setCaseData(data);
+      if (data.invoice) {
+        setCorrSupplier(data.invoice.supplier_name || '');
+        setCorrLegalName(data.invoice.legal_name || '');
+        setCorrGstin(data.invoice.gstin || '');
+        setCorrInvNumber(data.invoice.invoice_number || '');
+        setCorrTotalAmount(data.invoice.total_amount ? String(data.invoice.total_amount) : '');
+        setCorrTaxableAmount(data.invoice.taxable_amount ? String(data.invoice.taxable_amount) : '');
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load case');
     } finally {
@@ -50,6 +71,7 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
 
   const handleRunInvestigation = async () => {
     setInvestigating(true);
+    setError(null);
     try {
       const updated = await api.triggerInvestigation(caseId);
       setCaseData(updated);
@@ -63,6 +85,7 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
   const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setReviewing(true);
+    setError(null);
     try {
       const updated = await api.submitReview(caseId, {
         reviewer_id: reviewerId,
@@ -71,11 +94,35 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
         requested_documents: []
       });
       setCaseData(updated);
-      setReviewSuccess(true);
     } catch (err: any) {
       setError(err.message || 'Failed to submit review');
     } finally {
       setReviewing(false);
+    }
+  };
+
+  const handleCorrectionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCorrecting(true);
+    setError(null);
+    try {
+      const payload: InvoiceCorrection = {
+        corrected_supplier_name: corrSupplier.trim() || undefined,
+        corrected_legal_name: corrLegalName.trim() || undefined,
+        corrected_gstin: corrGstin.trim() ? corrGstin.trim().toUpperCase() : undefined,
+        corrected_invoice_number: corrInvNumber.trim() || undefined,
+        corrected_total_amount: corrTotalAmount ? parseFloat(corrTotalAmount) : undefined,
+        corrected_taxable_amount: corrTaxableAmount ? parseFloat(corrTaxableAmount) : undefined,
+        correction_notes: corrNotes.trim() || 'Manual reviewer correction',
+        reviewer_id: reviewerId
+      };
+      const updated = await api.correctInvoice(caseId, payload);
+      setCaseData(updated);
+      setShowEditModal(false);
+    } catch (err: any) {
+      setError(err.message || 'Failed to apply invoice corrections');
+    } finally {
+      setCorrecting(false);
     }
   };
 
@@ -109,14 +156,14 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
     );
   }
 
-  const { invoice, assessment, evidence_items, review, source_mode } = caseData;
+  const { invoice, assessment, evidence_items, review, source_mode, duplicate_type, review_history } = caseData;
 
   return (
     <div className="space-y-6">
       {/* Top Header & Telemetry */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-5">
         <div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <span className="text-xs uppercase font-mono px-2 py-0.5 rounded bg-slate-800 text-cyan-400 border border-slate-700">
               {caseData.case_reference}
             </span>
@@ -125,9 +172,18 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
               <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-950/60 text-amber-400 border border-amber-800/60">
                 Simulated Evidence Mode
               </span>
-            ) : (
+            ) : source_mode === 'LIVE' ? (
               <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800/60 flex items-center gap-1">
                 <Cpu className="h-3 w-3" /> Live TinyFish Research
+              </span>
+            ) : (
+              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                Evidence Unavailable
+              </span>
+            )}
+            {duplicate_type && (
+              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800 flex items-center gap-1">
+                <Copy className="h-3 w-3" /> {duplicate_type}
               </span>
             )}
           </div>
@@ -140,6 +196,14 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowEditModal(true)}
+            className="flex items-center gap-1.5 text-xs text-cyan-300 hover:text-white bg-slate-900 border border-cyan-800/60 px-3 py-1.5 rounded-md hover:bg-slate-800 transition"
+          >
+            <Edit3 className="h-3.5 w-3.5 text-cyan-400" />
+            <span>Correct Claims</span>
+          </button>
+
           <button
             onClick={handleDownloadReport}
             className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-md hover:bg-slate-800 transition"
@@ -167,6 +231,26 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
         </div>
       )}
 
+      {/* Duplicate Notice Banner */}
+      {duplicate_type && (
+        <div className="p-3 bg-amber-950/40 border border-amber-800 rounded-lg text-amber-200 text-xs flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0" />
+          <span>
+            <strong>Duplicate Alert:</strong> Detected {duplicate_type} (Previous Case: {caseData.duplicate_of_case_id || 'System Archive'}). Please verify if this is an intentional reissue or duplicate submission before approval.
+          </span>
+        </div>
+      )}
+
+      {/* Scanned Image / OCR Alert */}
+      {invoice.is_scanned_image && (
+        <div className="p-3 bg-blue-950/40 border border-blue-800/80 rounded-lg text-blue-200 text-xs flex items-center gap-2">
+          <Info className="h-4 w-4 text-blue-400 flex-shrink-0" />
+          <span>
+            <strong>Scanned Document:</strong> {invoice.ocr_status_message || 'Document has no native text layer. Review extracted values and use Correct Claims if necessary.'}
+          </span>
+        </div>
+      )}
+
       {/* Recommendation Banner */}
       {assessment && (
         <div className={`rounded-xl p-5 border ${
@@ -187,16 +271,20 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
                     Recommendation: {assessment.recommendation}
                   </h2>
                   <span className="text-xs font-mono text-slate-400">
-                    &bull; Score: <strong className="text-white">{assessment.risk_score}</strong>/100
+                    &bull; Policy Compliance Score: <strong className="text-white">{assessment.risk_score}</strong>/100
                   </span>
                 </div>
                 <p className="text-xs text-slate-300 mt-1">
                   {assessment.recommendation === 'MANUAL_REVIEW' 
-                    ? 'Discrepancies or unverified fields detected. Fail-closed policy requires authorized human sign-off before payment.'
+                    ? 'Discrepancies, missing evidence, or unverified fields detected. Fail-closed policy requires authorized human sign-off before payment.'
                     : assessment.recommendation === 'BLOCK'
-                    ? 'Critical hard safety gate triggered. Suspended status or identity conflict detected.'
+                    ? 'Critical hard safety gate triggered. Suspended registration, duplicate invoice, or critical identity conflict detected.'
                     : 'Required claims reconciled with public evidence. Human sign-off required to finalize.'}
                 </p>
+                <p className="text-[11px] font-mono text-slate-400 mt-1">
+                  {assessment.score_explanation}
+                </p>
+
                 {/* Reason Codes */}
                 {assessment.reason_codes.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-3">
@@ -212,7 +300,7 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
 
             <div className="text-right font-mono text-[11px] text-slate-400">
               <div>Rule Engine v{assessment.ruleset_version}</div>
-              <div>Evidence: {assessment.evidence_completeness}</div>
+              <div>Evidence: <strong className="text-slate-300">{assessment.evidence_completeness}</strong></div>
             </div>
           </div>
 
@@ -280,14 +368,28 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Invoice Raw Claims */}
         <div className="bg-[#0f172a]/70 border border-slate-800 rounded-lg p-5 space-y-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-300 font-mono border-b border-slate-800 pb-2">
-            1. Invoice Intake Claims
-          </h2>
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-300 font-mono">
+              1. Extracted Invoice Claims
+            </h2>
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="text-[11px] font-mono text-cyan-400 hover:underline flex items-center gap-1"
+            >
+              <Edit3 className="h-3 w-3" /> Edit
+            </button>
+          </div>
           <div className="space-y-3 text-xs">
             <div>
-              <span className="text-[11px] font-mono text-slate-500 block">Supplier Name</span>
+              <span className="text-[11px] font-mono text-slate-500 block">Supplier Trade Name</span>
               <span className="font-semibold text-white">{invoice.supplier_name}</span>
             </div>
+            {invoice.legal_name && (
+              <div>
+                <span className="text-[11px] font-mono text-slate-500 block">Declared Legal Name</span>
+                <span className="font-mono text-slate-300">{invoice.legal_name}</span>
+              </div>
+            )}
             <div>
               <span className="text-[11px] font-mono text-slate-500 block">GSTIN</span>
               <div className="flex items-center gap-2">
@@ -302,7 +404,13 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
             <div>
               <span className="text-[11px] font-mono text-slate-500 block">Invoice Total &amp; Tax</span>
               <span className="font-mono text-white">
-                &#8377;{invoice.total_amount.toLocaleString('en-IN')} (Taxable: &#8377;{invoice.taxable_amount.toLocaleString('en-IN')})
+                &#8377;{invoice.total_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Taxable: &#8377;{invoice.taxable_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })})
+              </span>
+            </div>
+            <div>
+              <span className="text-[11px] font-mono text-slate-500 block">Tax Breakdown</span>
+              <span className="font-mono text-slate-300 text-[11px]">
+                CGST: &#8377;{invoice.cgst.toLocaleString('en-IN')} | SGST: &#8377;{invoice.sgst.toLocaleString('en-IN')} | IGST: &#8377;{invoice.igst.toLocaleString('en-IN')}
               </span>
             </div>
             <div>
@@ -331,15 +439,24 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
                   <div key={chk.check_id} className="py-3 first:pt-0 last:pb-0 space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-semibold text-slate-200">{chk.field_name}</span>
-                      <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded font-semibold ${
-                        chk.status === 'MATCH'
-                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                          : chk.status === 'POSSIBLE_MATCH'
-                          ? 'bg-amber-950 text-amber-400 border border-amber-800'
-                          : 'bg-rose-950 text-rose-400 border border-rose-800'
-                      }`}>
-                        {chk.status}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {chk.source_mode && (
+                          <span className="text-[9px] font-mono uppercase px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                            {chk.source_mode}
+                          </span>
+                        )}
+                        <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded font-semibold ${
+                          chk.status === 'MATCH'
+                            ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                            : chk.status === 'POSSIBLE_MATCH'
+                            ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                            : chk.status === 'UNAVAILABLE'
+                            ? 'bg-slate-800 text-slate-300 border border-slate-700'
+                            : 'bg-rose-950 text-rose-400 border border-rose-800'
+                        }`}>
+                          {chk.status}
+                        </span>
+                      </div>
                     </div>
                     <p className="text-xs text-slate-300 leading-relaxed">
                       {chk.explanation}
@@ -367,22 +484,43 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
             )}
           </div>
 
-          {/* Evidence Provenance Snapshots */}
+          {/* Discovered Evidence Dossier View */}
           {evidence_items.length > 0 && (
             <div className="bg-[#0f172a]/70 border border-slate-800 rounded-lg p-5 space-y-3">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-300 font-mono border-b border-slate-800 pb-2">
-                3. Raw Evidence Provenance Trail
+                3. Evidence Dossier &amp; Provenance Trail
               </h2>
               <div className="space-y-3">
                 {evidence_items.map(ev => (
-                  <div key={ev.evidence_id} className="p-3 bg-[#0b0f19] border border-slate-800 rounded text-xs space-y-1">
+                  <div key={ev.evidence_id} className="p-3 bg-[#0b0f19] border border-slate-800 rounded text-xs space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold text-cyan-300">{ev.source_name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-cyan-300">{ev.source_name}</span>
+                        {ev.is_fallback ? (
+                          <span className="text-[9px] font-mono uppercase px-1.5 py-0.2 rounded bg-amber-950 text-amber-400 border border-amber-800">
+                            Simulated Fallback
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-mono uppercase px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                            {ev.source_mode || 'SIMULATED'}
+                          </span>
+                        )}
+                      </div>
                       <span className="text-[10px] font-mono text-slate-500">{ev.retrieved_at}</span>
                     </div>
-                    <p className="text-slate-300 font-mono text-[11px] bg-slate-950 p-2 rounded border border-slate-900">
+                    {ev.fallback_reason && (
+                      <p className="text-[11px] text-amber-300 font-mono">
+                        Fallback notice: {ev.fallback_reason}
+                      </p>
+                    )}
+                    <p className="text-slate-300 font-mono text-[11px] bg-slate-950 p-2 rounded border border-slate-900 leading-relaxed">
                       {ev.raw_excerpt}
                     </p>
+                    {ev.match_rationale && (
+                      <p className="text-[11px] text-slate-400 italic">
+                        Rationale: {ev.match_rationale}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -390,6 +528,33 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
           )}
         </div>
       </div>
+
+      {/* Reviewer Activity History Timeline */}
+      {review_history && review_history.length > 0 && (
+        <div className="bg-[#0f172a]/70 border border-slate-800 rounded-lg p-5 space-y-3">
+          <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+            <History className="h-4 w-4 text-cyan-400" />
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-300 font-mono">
+              Reviewer Activity History ({review_history.length})
+            </h2>
+          </div>
+          <div className="space-y-2">
+            {review_history.map(rh => (
+              <div key={rh.action_id} className="p-3 bg-[#0b0f19] border border-slate-800 rounded text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="font-mono text-emerald-400 font-bold uppercase mr-2">[{rh.action}]</span>
+                  <span className="text-slate-200">{rh.rationale}</span>
+                </div>
+                <div className="text-[11px] font-mono text-slate-400 flex items-center gap-2">
+                  <span>{rh.reviewer_id}</span>
+                  <span>&bull;</span>
+                  <span>{rh.recorded_at}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Reviewer Action / Sign-Off Box */}
       <div className="bg-[#0f172a]/90 border border-slate-700 rounded-xl p-5 space-y-4">
@@ -417,7 +582,7 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
             </div>
             <div>
               <span className="text-slate-400 font-mono text-[11px]">Reviewer: </span>
-              <span className="text-white font-medium">{review.reviewer_id}</span>
+              <span className="text-white font-medium">{review.reviewer_id} ({review.reviewer_role || 'ap_analyst'})</span>
             </div>
             <div>
               <span className="text-slate-400 font-mono text-[11px]">Audit Rationale: </span>
@@ -460,7 +625,7 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
 
             <div>
               <label className="block text-slate-400 font-mono text-[11px] mb-1">
-                Mandatory Review Rationale (Saved to Immutable Audit Trail) *
+                Mandatory Review Rationale (Saved to Tamper-Evident Chained Audit Trail) *
               </label>
               <textarea
                 required
@@ -484,6 +649,98 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
           </form>
         )}
       </div>
+
+      {/* Modal: Correct Extracted Invoice Claims */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-[#0f172a] border border-slate-700 rounded-xl max-w-lg w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-bold text-white font-mono flex items-center gap-2">
+                <Edit3 className="h-4 w-4 text-cyan-400" />
+                <span>Correct Invoice Claims &amp; Rerun Assessment</span>
+              </h3>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="text-slate-400 hover:text-white text-xs"
+              >
+                &times; Close
+              </button>
+            </div>
+
+            <form onSubmit={handleCorrectionSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-400 font-mono text-[11px] mb-1">Supplier Trade Name</label>
+                <input
+                  type="text"
+                  value={corrSupplier}
+                  onChange={(e) => setCorrSupplier(e.target.value)}
+                  className="w-full bg-[#0b0f19] border border-slate-700 rounded px-3 py-1.5 text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-mono text-[11px] mb-1">Supplier GSTIN</label>
+                <input
+                  type="text"
+                  value={corrGstin}
+                  onChange={(e) => setCorrGstin(e.target.value.toUpperCase())}
+                  className="w-full bg-[#0b0f19] border border-slate-700 rounded px-3 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-mono text-[11px] mb-1">Invoice Number</label>
+                  <input
+                    type="text"
+                    value={corrInvNumber}
+                    onChange={(e) => setCorrInvNumber(e.target.value)}
+                    className="w-full bg-[#0b0f19] border border-slate-700 rounded px-3 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-mono text-[11px] mb-1">Total Amount (&#8377;)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={corrTotalAmount}
+                    onChange={(e) => setCorrTotalAmount(e.target.value)}
+                    className="w-full bg-[#0b0f19] border border-slate-700 rounded px-3 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-mono text-[11px] mb-1">Correction Rationale / Notes</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Corrected OCR typo in GSTIN character 14"
+                  value={corrNotes}
+                  onChange={(e) => setCorrNotes(e.target.value)}
+                  className="w-full bg-[#0b0f19] border border-slate-700 rounded px-3 py-1.5 text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={correcting}
+                  className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold rounded transition disabled:opacity-50"
+                >
+                  {correcting ? 'Saving & Reassessing...' : 'Apply & Rerun Assessment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

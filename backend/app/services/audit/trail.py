@@ -48,10 +48,36 @@ class AuditTrailService:
         md.append("## 2. Risk Assessment & Decision")
         if assess:
             md.append(f"- **Outcome:** **`{assess.recommendation.value}`**")
-            md.append(f"- **Illustrative Risk Score:** {assess.risk_score}/100")
+            md.append(f"- **Composite Safety Score:** {assess.risk_score}/100")
             md.append(f"- **Triggered Reason Codes:** `{', '.join(assess.reason_codes) or 'NONE'}`")
             md.append(f"- **Hard Safety Gates:** `{', '.join(assess.hard_gates_triggered) or 'NONE'}`")
-            md.append(f"- **Evidence Completeness:** {assess.evidence_completeness}\n")
+            md.append(f"- **Evidence Completeness:** {assess.evidence_completeness}")
+
+            if assess.forensic_vectors:
+                fv = assess.forensic_vectors
+                md.append("\n### 2.1 The 5-Vector Forensic Topology")
+                md.append(f"- **1. ITC Clawback Risk Index:** `{fv.itc_clawback_risk_index:.2f}` / 1.00")
+                md.append(f"- **2. Director Shell Contagion Score:** `{fv.director_shell_contagion_score:.2f}` / 1.00")
+                md.append(f"- **3. Address Collocation Density:** `{fv.address_collocation_density}` distinct entities at same address")
+                md.append(f"- **4. Operational Grounding Index:** `{fv.operational_grounding_score:.2f}` / 1.00")
+                md.append(f"- **5. Pop-Up Velocity Factor:** `{fv.popup_velocity_factor:.2f}` / 1.00")
+
+            if assess.itc_exposure:
+                itc = assess.itc_exposure
+                md.append("\n### 2.2 Direct Rupee Financial Exposure (CGST Sec 16(2)(c) & Sec 74)")
+                md.append(f"- **Claimed GST Component:** ₹{itc.tax_amount_claimed:,.2f}")
+                md.append(f"- **Statutory 100% Penalty:** ₹{itc.statutory_penalty_inr:,.2f}")
+                md.append(f"- **Estimated 18% p.a. Interest:** ₹{itc.estimated_interest_inr:,.2f}")
+                md.append(f"- **Total Financial Liability:** **₹{itc.total_financial_liability_inr:,.2f}**")
+                md.append(f"- **Risk Classification:** `{itc.risk_tier}`")
+                md.append(f"- **CFO Advisory:** *\"{itc.cfo_advisory}\"*")
+
+            if assess.entity_graph:
+                eg = assess.entity_graph
+                md.append(f"\n### 2.3 Forensic Knowledge Graph Summary")
+                md.append(f"- **Total Nodes:** {eg.total_nodes} (Vendor, Directors, Addresses, Litigation)")
+                md.append(f"- **Flagged Contagion Edges:** {eg.total_flagged_edges}\n")
+
 
         md.append("## 3. Evidence Provenance Trail")
         for ev in case.evidence_items:

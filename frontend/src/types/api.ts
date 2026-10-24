@@ -77,6 +77,48 @@ export interface FieldCheckResult {
   source_url?: string;
 }
 
+export interface ForensicVectorScores {
+  itc_clawback_risk_index: number;
+  director_shell_contagion_score: number;
+  address_collocation_density: number;
+  operational_grounding_score: number;
+  popup_velocity_factor: number;
+}
+
+export interface ITCExposureDetails {
+  tax_amount_claimed: number;
+  itc_clawback_probability: number;
+  statutory_penalty_inr: number;
+  estimated_interest_inr: number;
+  total_financial_liability_inr: number;
+  applicable_sections: string[];
+  risk_tier: 'CRITICAL' | 'HIGH' | 'MODERATE' | 'LOW';
+  cfo_advisory: string;
+}
+
+export interface GraphNode {
+  id: string;
+  label: string;
+  type: string;
+  risk_level: string;
+  metadata?: Record<string, any>;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  relationship: string;
+  is_flagged: boolean;
+  weight: number;
+}
+
+export interface EntityGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  total_nodes: number;
+  total_flagged_edges: number;
+}
+
 export interface RiskAssessment {
   assessment_id: string;
   case_id: string;
@@ -86,10 +128,14 @@ export interface RiskAssessment {
   reason_codes: string[];
   field_checks: FieldCheckResult[];
   hard_gates_triggered: string[];
+  forensic_vectors?: ForensicVectorScores;
+  itc_exposure?: ITCExposureDetails;
+  entity_graph?: EntityGraph;
   evidence_completeness: string;
   human_signoff_required: boolean;
   assessed_at: string;
 }
+
 
 export interface ReviewAction {
   action_id: string;

@@ -215,8 +215,66 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
               <div>Evidence: {assessment.evidence_completeness}</div>
             </div>
           </div>
+
+          {/* Direct Rupee Financial Liability (CGST Sec 16(2)(c)) */}
+          {assessment.itc_exposure && (
+            <div className="mt-4 pt-4 border-t border-slate-800/80 bg-slate-950/60 rounded-lg p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+              <div>
+                <span className="text-[10px] font-mono uppercase text-slate-400 block tracking-wider">
+                  Direct Statutory Liability &bull; CGST Sec 16(2)(c) &amp; Sec 74
+                </span>
+                <div className="text-white font-medium mt-0.5">
+                  Claimed ITC: <strong className="text-cyan-300 font-mono">&#8377;{assessment.itc_exposure.tax_amount_claimed.toLocaleString('en-IN')}</strong> &bull; Total Exposure: <strong className="text-rose-400 font-mono">&#8377;{assessment.itc_exposure.total_financial_liability_inr.toLocaleString('en-IN')}</strong> (incl. 100% penalty)
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1 italic">
+                  &ldquo;{assessment.itc_exposure.cfo_advisory}&rdquo;
+                </p>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <span className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold uppercase ${
+                  assessment.itc_exposure.risk_tier === 'CRITICAL' ? 'bg-rose-950 text-rose-300 border border-rose-800' :
+                  assessment.itc_exposure.risk_tier === 'HIGH' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                  'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                }`}>
+                  ITC TIER: {assessment.itc_exposure.risk_tier}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* 5-Vector Forensic Topology Radar */}
+          {assessment.forensic_vectors && (
+            <div className="mt-4 pt-4 border-t border-slate-800/80">
+              <span className="text-[10px] font-mono uppercase text-slate-400 block tracking-wider mb-2">
+                5-Vector Forensic Risk Topology
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
+                <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+                  <span className="text-[9px] text-slate-400 block font-mono">1. ITC Clawback</span>
+                  <span className="font-mono font-bold text-cyan-400">{Math.round(assessment.forensic_vectors.itc_clawback_risk_index * 100)}%</span>
+                </div>
+                <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+                  <span className="text-[9px] text-slate-400 block font-mono">2. Shell Contagion</span>
+                  <span className="font-mono font-bold text-rose-400">{Math.round(assessment.forensic_vectors.director_shell_contagion_score * 100)}%</span>
+                </div>
+                <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+                  <span className="text-[9px] text-slate-400 block font-mono">3. Ghost Density</span>
+                  <span className="font-mono font-bold text-amber-400">{assessment.forensic_vectors.address_collocation_density} entities</span>
+                </div>
+                <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+                  <span className="text-[9px] text-slate-400 block font-mono">4. Premises Match</span>
+                  <span className="font-mono font-bold text-emerald-400">{Math.round(assessment.forensic_vectors.operational_grounding_score * 100)}%</span>
+                </div>
+                <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
+                  <span className="text-[9px] text-slate-400 block font-mono">5. Pop-Up Velocity</span>
+                  <span className="font-mono font-bold text-purple-400">{Math.round(assessment.forensic_vectors.popup_velocity_factor * 100)}%</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
+
 
       {/* Grid: Invoice Claims vs Reconciled Evidence */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

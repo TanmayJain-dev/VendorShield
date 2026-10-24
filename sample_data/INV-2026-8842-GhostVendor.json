@@ -1,16 +1,25 @@
 {
   "case_reference": "INV-2026-8842",
   "supplier_name": "Specter Cloud Technologies",
-  "gstin": "07AAAAA0000A1Z5",
+  "legal_name": "Specter Cloud Technologies LLP",
+  "gstin": "07AAAAA0000A1Z4",
   "invoice_date": "2026-10-18",
   "taxable_amount": 250000.00,
   "cgst": 22500.00,
   "sgst": 22500.00,
   "igst": 0.0,
   "total_amount": 295000.00,
-  "billing_address": "Unknown Commercial Complex, Delhi",
+  "billing_address": "Suite 901, Unknown Commercial Complex, New Delhi - 110001",
   "bank_account_masked": "XXXX-XXXX-4411",
   "ifsc_code": "SBIN0001234",
+  "line_items": [
+    {
+      "description": "Enterprise Cloud Server Managed Capacity Q3",
+      "quantity": 1.0,
+      "unit_price": 250000.00,
+      "total": 250000.00
+    }
+  ],
   "expected_outcome": "MANUAL_REVIEW",
   "expected_reason_codes": [
     "EVIDENCE_INSUFFICIENT"

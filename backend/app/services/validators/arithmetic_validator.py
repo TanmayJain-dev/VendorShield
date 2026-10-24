@@ -1,4 +1,4 @@
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 from ...schemas.invoice import LineItem
 
 def validate_invoice_arithmetic(
@@ -7,13 +7,15 @@ def validate_invoice_arithmetic(
     sgst: float,
     igst: float,
     total_amount: float,
-    line_items: List[LineItem] = None,
+    line_items: Optional[List[LineItem]] = None,
+    round_off: float = 0.0,
+    discount_amount: float = 0.0,
     tolerance: float = 1.0
 ) -> Tuple[bool, str]:
     """
     Validates arithmetic consistency of an invoice:
     1. Sum of line items ~= taxable_amount (if line items provided)
-    2. taxable_amount + cgst + sgst + igst ~= total_amount
+    2. taxable_amount + cgst + sgst + igst + round_off - discount_amount ~= total_amount
     """
     # 1. Verify line items sum if present
     if line_items and len(line_items) > 0:
@@ -25,10 +27,10 @@ def validate_invoice_arithmetic(
             )
 
     # 2. Verify total reconciliation
-    calculated_total = taxable_amount + cgst + sgst + igst
+    calculated_total = taxable_amount + cgst + sgst + igst + round_off - discount_amount
     if abs(calculated_total - total_amount) > tolerance:
         return False, (
-            f"Tax breakdown sum ({taxable_amount:.2f} + {cgst:.2f} + {sgst:.2f} + {igst:.2f} = {calculated_total:.2f}) "
+            f"Tax breakdown sum ({taxable_amount:.2f} + {cgst:.2f} + {sgst:.2f} + {igst:.2f} + round_off {round_off:.2f} - discount {discount_amount:.2f} = {calculated_total:.2f}) "
             f"does not match declared total amount ({total_amount:.2f})"
         )
 

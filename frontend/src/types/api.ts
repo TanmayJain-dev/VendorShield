@@ -124,5 +124,16 @@ export interface CaseSummary {
   invoice_number: string;
   total_amount: number;
   recommendation?: RecommendationOutcome;
+  risk_score?: number;
+  review_status?: string;
+  gstin_claim?: string;
   created_at: string;
 }
+
+export interface InvoiceCorrection {
+  corrected_supplier_name?: string;
+  corrected_gstin?: string;
+  corrected_total_amount?: number;
+  correction_notes?: string;
+}
+

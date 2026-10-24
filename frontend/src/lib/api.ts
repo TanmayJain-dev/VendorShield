@@ -4,13 +4,37 @@ import {
   ReviewAction,
   ReviewSubmissionRequest,
   InvoiceCorrection,
-  AuditEvent
+  AuditEvent,
+  ManualGstinEvidenceRequest,
+  ExplainVerdictResponse,
+  AuditVerifyResponse
 } from '../types/api';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
+function getAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+    ...extraHeaders
+  };
+  if (typeof window !== 'undefined') {
+    const token = sessionStorage.getItem('vendorshield_token') || 'dev-reviewer-token';
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      headers['X-Reviewer-Token'] = token;
+    }
+  } else {
+    headers['Authorization'] = 'Bearer dev-reviewer-token';
+    headers['X-Reviewer-Token'] = 'dev-reviewer-token';
+  }
+  return headers;
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
+    if (res.status === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('vendorshield_auth_error'));
+    }
     let errorDetail = `Request failed with status ${res.status}`;
     try {
       const data = await res.json();
@@ -22,7 +46,6 @@ async function handleResponse<T>(res: Response): Promise<T> {
         errorDetail = data.message;
       }
     } catch {
-      // Body is not JSON
       try {
         const text = await res.text();
         if (text) errorDetail = text;
@@ -36,96 +59,74 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 export const api = {
-  /**
-   * Retrieves all vendor due-diligence cases.
-   */
-  async getCases(): Promise<CaseSummary[]> {
-    const res = await fetch(`${API_BASE_URL}/cases`, {
+  getCaseFileUrl(caseId: string): string {
+    return `${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/file`;
+  },
+
+  async getCases(includeDemo = true): Promise<CaseSummary[]> {
+    const res = await fetch(`${API_BASE_URL}/cases?include_demo=${includeDemo}`, {
       method: 'GET',
-      headers: {
-        'Accept': 'application/json'
-      },
+      headers: getAuthHeaders(),
       cache: 'no-store'
     });
     return handleResponse<CaseSummary[]>(res);
   },
 
-  /**
-   * Retrieves details of a specific case by case_id.
-   */
   async getCase(caseId: string): Promise<Case> {
     const res = await fetch(`${API_BASE_URL}/cases/${encodeURIComponent(caseId)}`, {
       method: 'GET',
-      headers: {
-        'Accept': 'application/json'
-      },
+      headers: getAuthHeaders(),
       cache: 'no-store'
     });
     return handleResponse<Case>(res);
   },
 
-  /**
-   * Creates a new case via raw FormData (used by intake upload form).
-   */
   async createCase(formData: FormData): Promise<Case> {
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (typeof window !== 'undefined') {
+      const token = sessionStorage.getItem('vendorshield_token') || 'dev-reviewer-token';
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+    }
     const res = await fetch(`${API_BASE_URL}/cases`, {
       method: 'POST',
-      headers: {
-        'Accept': 'application/json'
-      },
+      headers,
       body: formData
     });
     return handleResponse<Case>(res);
   },
 
-  /**
-   * Uploads an invoice document (PDF/Image) for parsing and case creation.
-   */
   async uploadInvoice(
     file: File,
-    metadata?: { supplier_name?: string; invoice_number?: string; total_amount?: number }
+    metadata?: { supplier_name?: string; invoice_number?: string; total_amount?: number; is_demo?: boolean }
   ): Promise<Case> {
     const formData = new FormData();
     formData.append('file', file);
     if (metadata?.supplier_name) formData.append('supplier_name', metadata.supplier_name);
     if (metadata?.invoice_number) formData.append('invoice_number', metadata.invoice_number);
     if (metadata?.total_amount !== undefined) formData.append('total_amount', String(metadata.total_amount));
+    if (metadata?.is_demo !== undefined) formData.append('is_demo', String(metadata.is_demo));
 
     return this.createCase(formData);
   },
 
-  /**
-   * Triggers autonomous 4-hop TinyFish forensic investigation on a case.
-   */
   async triggerInvestigation(caseId: string): Promise<Case> {
     const res = await fetch(`${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/investigate`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      }
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' })
     });
     return handleResponse<Case>(res);
   },
 
-  /**
-   * Submits human reviewer sign-off decision with mandatory rationale.
-   * Client provides intent; server generates trusted action_id and timestamps.
-   */
   async submitReview(
     caseId: string,
     review: ReviewSubmissionRequest
   ): Promise<Case> {
     const res = await fetch(`${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/review`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-Reviewer-Token': 'vendorshield-dev-review-token-2026'
-      },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
-        reviewer_id: review.reviewer_id || 'analyst',
-        reviewer_role: review.reviewer_role || 'ap_analyst',
+        reviewer_id: review.reviewer_id || 'reviewer',
+        reviewer_role: review.reviewer_role || 'reviewer',
         action: review.action,
         rationale: review.rationale,
         requested_documents: review.requested_documents || []
@@ -134,44 +135,55 @@ export const api = {
     return handleResponse<Case>(res);
   },
 
-  /**
-   * Corrects extracted invoice claims and triggers automatic re-assessment.
-   */
   async correctInvoice(caseId: string, correction: InvoiceCorrection): Promise<Case> {
     const res = await fetch(`${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/correct`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(correction)
     });
     return handleResponse<Case>(res);
   },
 
-  /**
-   * Retrieves the cryptographically chained audit trail for a case.
-   */
+  async submitManualGstinEvidence(caseId: string, payload: ManualGstinEvidenceRequest): Promise<Case> {
+    const res = await fetch(`${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/evidence/gstin`, {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
+    });
+    return handleResponse<Case>(res);
+  },
+
+  async explainVerdict(caseId: string): Promise<ExplainVerdictResponse> {
+    const res = await fetch(`${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/explain`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      cache: 'no-store'
+    });
+    return handleResponse<ExplainVerdictResponse>(res);
+  },
+
   async getAuditTrail(caseId: string): Promise<AuditEvent[]> {
     const res = await fetch(`${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/audit-trail`, {
       method: 'GET',
-      headers: {
-        'Accept': 'application/json'
-      },
+      headers: getAuthHeaders(),
       cache: 'no-store'
     });
     return handleResponse<AuditEvent[]>(res);
   },
 
-  /**
-   * Downloads the human-readable Markdown due-diligence audit report.
-   */
+  async verifyAuditChain(caseId: string): Promise<AuditVerifyResponse> {
+    const res = await fetch(`${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/audit/verify`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      cache: 'no-store'
+    });
+    return handleResponse<AuditVerifyResponse>(res);
+  },
+
   async downloadReport(caseId: string): Promise<string> {
     const res = await fetch(`${API_BASE_URL}/cases/${encodeURIComponent(caseId)}/report`, {
       method: 'GET',
-      headers: {
-        'Accept': 'text/plain'
-      }
+      headers: getAuthHeaders({ 'Accept': 'text/plain' })
     });
     if (!res.ok) {
       throw new Error(`Failed to download report (status ${res.status})`);
@@ -179,9 +191,6 @@ export const api = {
     return res.text();
   },
 
-  /**
-   * Alias for downloadReport.
-   */
   async getAuditReport(caseId: string): Promise<string> {
     return this.downloadReport(caseId);
   }

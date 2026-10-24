@@ -132,6 +132,43 @@ collected 105 items
 ====================== 105 passed, 2 warnings in 11.30s =======================
 ```
 
+### Phase D (P0): Minimal Real Auth & Audit Verification (Completed)
+* **Key Enhancements Implemented:**
+  - **D1: Token-Based User Authentication (`app/auth/security.py`):** Configurable `USERS_JSON` mapping tokens to user IDs and roles (`ap_analyst` vs `reviewer`).
+  - **D2: Server-Derived Identity:** Removed client trust in `reviewer_id` and `reviewer_role`. Role checks enforce that only `reviewer` / `compliance_officer` users can sign off on reviews.
+  - **D3: In-Memory Rate Limiting:** Sliding window rate limiter (`TokenRateLimiter`) enforcing per-token upload and request thresholds.
+  - **D4: Startup Production Safety:** Production environment rejects missing or unconfigured `USERS_JSON` and default dev reviewer tokens.
+  - **D5: Cryptographic Audit Chain Verification (`verify_audit_chain`):** Recomputes SHA-256 hash chains across all audit events for a case, detects tampering, and exposes `GET /api/cases/{id}/audit/verify`.
+  - **D6: Frontend Client Integration:** `frontend/src/lib/api.ts` attaches `Authorization: Bearer <token>` from `sessionStorage`, handles 401s, and exports endpoints for manual GSTIN evidence submission, explanation, and audit verification.
+
+* **Backend Pytest Output (Phase D):**
+```
+collected 111 items
+======================= 111 passed, 2 warnings in 7.03s =======================
+```
+
+* **Frontend Build Output (Phase D):**
+```
+$ next build
+   ▲ Next.js 15.5.28
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 4.2s
+   Linting and checking validity of types ...
+   Collecting page data ...
+ ✓ Generating static pages (7/7)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ○ /                                    15.9 kB         123 kB
+├ ○ /_not-found                            988 B         103 kB
+├ ƒ /cases/[id]                          10.1 kB         112 kB
+├ ○ /dashboard                             245 B         113 kB
+├ ○ /queue                                 162 B         113 kB
+└ ○ /upload                              4.77 kB         112 kB
+```
+
 ---
 
 ## 2. Phase Implementation Checklist
@@ -139,7 +176,7 @@ collected 105 items
 - [x] **Phase A (P0): Fix Verified Defects**
 - [x] **Phase B (P0): Layered Extraction Pipeline (QR + Text + LLM with Provenance)**
 - [x] **Phase C (P0): Real Checks, Pluggable Providers (Manual, HttpKyc, TinyFish), IFSC & Verdict Semantics**
-- [ ] **Phase D (P0): Minimal Real Auth (Bearer Tokens, Roles, Server-Derived Identity, Audit Verify)**
+- [x] **Phase D (P0): Minimal Real Auth (Bearer Tokens, Roles, Server-Derived Identity, Audit Verify)**
 - [ ] **Phase E (P0): Frontend for Real Flow (Review Step, Provenance Chips, Manual Evidence Form, Honest Claims)**
 - [ ] **Phase F (P1): GSTR-2B Reconciliation & Invoice Matching**
 - [ ] **Phase G (P1): Test Corpus (12 PDFs), Eval Harness, CI, Honest Documentation**

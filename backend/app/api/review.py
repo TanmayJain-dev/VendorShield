@@ -56,6 +56,21 @@ def resolve_reviewer_identity(
 
     # If an explicit token is supplied, validate it strictly (do NOT fall through to dev mode)
     if token is not None:
+        from ..auth.security import load_users
+        users = load_users()
+        user = users.get(token)
+        if user:
+            if user.role not in ("reviewer", "compliance_officer"):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Forbidden: Reviewer role required for sign-off. User '{user.id}' has role '{user.role}'."
+                )
+            auth_mode = "PRESHARED_DEV_TOKEN_AUTHENTICATED" if token == "vendorshield-dev-review-token-2026" else "TOKEN_AUTHENTICATED"
+            return {
+                "reviewer_id": user.id,
+                "reviewer_role": user.role,
+                "auth_mode": auth_mode
+            }
         if token == settings.DEV_REVIEWER_TOKEN and token != "":
             return {
                 "reviewer_id": "authorized_ap_reviewer",

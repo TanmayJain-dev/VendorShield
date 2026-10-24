@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     USERS_JSON: str = os.getenv("USERS_JSON", "")
     AUTH_DISABLED: bool = False
     REVIEWER_DEV_MODE: bool = True
-    DEV_REVIEWER_TOKEN: str = os.getenv("DEV_REVIEWER_TOKEN", "vendorshield-dev-review-token-2026")
+    DEV_REVIEWER_TOKEN: str = os.getenv("DEV_REVIEWER_TOKEN", "")
 
     # Demo Mode & Seeding Isolation
     DEMO_MODE: bool = False
@@ -98,8 +98,10 @@ class Settings(BaseSettings):
         if self.ENVIRONMENT.lower() == "production":
             if self.REVIEWER_DEV_MODE:
                 raise ValueError("Insecure configuration: REVIEWER_DEV_MODE cannot be enabled in production environment.")
-            if not self.DEV_REVIEWER_TOKEN or self.DEV_REVIEWER_TOKEN == "vendorshield-dev-review-token-2026":
+            if self.DEV_REVIEWER_TOKEN == "vendorshield-dev-review-token-2026":
                 raise ValueError("Insecure configuration: Production mode rejects the default dev reviewer token. Configure a secure, explicit reviewer token.")
+            if not self.USERS_JSON and not self.DEV_REVIEWER_TOKEN:
+                raise ValueError("Insecure configuration: Production mode requires USERS_JSON or an explicit secure reviewer token configured.")
             if self.AUTH_DISABLED:
                 raise ValueError("Insecure configuration: AUTH_DISABLED cannot be true in production environment.")
         return self

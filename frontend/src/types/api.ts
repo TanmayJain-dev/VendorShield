@@ -302,3 +302,34 @@ export interface AuditEvent {
   prev_hash: string;
   event_hash: string;
 }
+
+export interface ManualGstinEvidenceRequest {
+  gstin: string;
+  legal_name: string;
+  trade_name?: string;
+  status: string;
+  registration_date?: string;
+  constitution_of_business?: string;
+  taxpayer_type?: string;
+  source_url?: string;
+  notes?: string;
+  reviewer_id?: string;
+}
+
+export interface ExplainVerdictResponse {
+  case_id: string;
+  verdict: string;
+  risk_score: number;
+  score_policy: string;
+  why_this_verdict: string[];
+  what_would_change_it: string[];
+}
+
+export interface AuditVerifyResponse {
+  case_id: string;
+  total_events: number;
+  chain_valid: boolean;
+  broken_event_id?: string | null;
+  broken_event_index?: number | null;
+  detail: string;
+}

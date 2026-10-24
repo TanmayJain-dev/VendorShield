@@ -458,3 +458,16 @@ async def explain_case_verdict(case_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Case {case_id} not found")
     
     return assessment_service.explain_verdict(case)
+
+
+@router.get("/{case_id}/audit/verify")
+async def verify_case_audit_chain(case_id: str, db: Session = Depends(get_db)):
+    """
+    Cryptographically verifies the SHA-256 hash chain of all audit events for a case.
+    Reports whether the chain is unbroken and identifies the first corrupted link.
+    """
+    case = CaseRepository.get_case(db, case_id)
+    if not case:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Case {case_id} not found")
+    
+    return CaseRepository.verify_audit_chain(db, case_id)

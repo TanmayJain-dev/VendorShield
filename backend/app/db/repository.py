@@ -549,6 +549,68 @@ class CaseRepository:
         return trail
 
     @staticmethod
+    def verify_audit_chain(db: Session, case_id: str) -> dict:
+        """
+        Recomputes cryptographic SHA-256 hash chains across all audit events for a case.
+        Detects tampering, out-of-order events, and broken links.
+        """
+        events = db.query(AuditEventModel).filter(
+            AuditEventModel.case_id == case_id
+        ).order_by(AuditEventModel.id.asc()).all()
+
+        if not events:
+            return {
+                "case_id": case_id,
+                "total_events": 0,
+                "chain_valid": True,
+                "broken_event_id": None,
+                "broken_event_index": None,
+                "detail": "No audit events recorded for this case."
+            }
+
+        expected_prev_hash = "0" * 64
+        for idx, event in enumerate(events):
+            # Check previous hash link
+            if event.prev_hash != expected_prev_hash:
+                return {
+                    "case_id": case_id,
+                    "total_events": len(events),
+                    "chain_valid": False,
+                    "broken_event_id": event.event_id,
+                    "broken_event_index": idx,
+                    "detail": f"Chain link broken at event index {idx} ({event.event_id}). Expected prev_hash {expected_prev_hash[:16]}..., found {event.prev_hash[:16]}..."
+                }
+
+            # Recompute content hash
+            recomputed = _compute_event_hash(
+                event.prev_hash,
+                event.timestamp,
+                event.event_type,
+                event.actor,
+                event.event_data_json
+            )
+            if recomputed != event.event_hash:
+                return {
+                    "case_id": case_id,
+                    "total_events": len(events),
+                    "chain_valid": False,
+                    "broken_event_id": event.event_id,
+                    "broken_event_index": idx,
+                    "detail": f"Digest mismatch at event index {idx} ({event.event_id}). Content has been modified."
+                }
+
+            expected_prev_hash = event.event_hash
+
+        return {
+            "case_id": case_id,
+            "total_events": len(events),
+            "chain_valid": True,
+            "broken_event_id": None,
+            "broken_event_index": None,
+            "detail": f"Cryptographic hash chain is intact and fully verified across {len(events)} events."
+        }
+
+    @staticmethod
     def find_case_by_file_hash(db: Session, file_hash: str) -> Optional[CaseModel]:
         return db.query(CaseModel).filter(CaseModel.file_sha256 == file_hash).first()
 

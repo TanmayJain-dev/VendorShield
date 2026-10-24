@@ -78,7 +78,7 @@ class AuditTrailService:
         md.append("## 2. Risk Assessment & Deterministic Policy Decision")
         if assess:
             md.append(f"- **Recommendation:** **`{assess.recommendation.value}`**")
-            md.append(f"- **Deterministic Policy Risk Index:** {assess.risk_score}/100")
+            md.append(f"- **Deterministic Policy Risk Index:** {assess.risk_score}/100 (Uncalibrated Heuristic Indicator)")
             md.append(f"- **Index Explanation:** {assess.score_explanation}")
             md.append(f"- **Ruleset Version:** `{assess.ruleset_version}`")
             md.append(f"- **Triggered Reason Codes:** `{', '.join(assess.reason_codes) or 'NONE'}`")
@@ -98,11 +98,11 @@ class AuditTrailService:
 
             if assess.itc_exposure:
                 itc = assess.itc_exposure
-                md.append("\n### 2.2 Direct Rupee Financial Exposure (CGST Sec 16(2)(c) & Sec 74 Decision-Support Estimate)")
+                md.append("\n### 2.2 Estimated Potential Financial Exposure (CGST Sec 16(2)(c) & Sec 74 Decision-Support Projection)")
                 md.append(f"- **Claimed GST Component:** ₹{itc.tax_amount_claimed:,.2f}")
                 md.append(f"- **Illustrative Statutory Penalty (Sec 74):** ₹{itc.statutory_penalty_inr:,.2f}")
                 md.append(f"- **Estimated Delayed Tax Interest (Sec 50 @ 18% p.a.):** ₹{itc.estimated_interest_inr:,.2f}")
-                md.append(f"- **Total Estimated Exposure:** **₹{itc.total_financial_liability_inr:,.2f}**")
+                md.append(f"- **Estimated Potential Exposure:** **₹{itc.total_financial_liability_inr:,.2f}** (illustrative clawback + penalty & interest)")
                 md.append(f"- **Risk Classification:** `{itc.risk_tier}`")
                 md.append(f"- **CFO Operational Advisory:** *\"{itc.cfo_advisory}\"*")
 

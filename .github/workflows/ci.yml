@@ -31,7 +31,7 @@ jobs:
 
       - name: Run Pytest Suite
         run: |
-          pytest -v --maxfail=1
+          PYTHONPATH=..:. pytest -v --maxfail=1
 
   frontend-build:
     name: Frontend Typecheck & Build

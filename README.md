@@ -43,7 +43,7 @@ VendorShield/
 │   │   │   ├── rules/               # Deterministic rule engine & fail-closed hard gates
 │   │   │   └── audit/               # Cryptographically chained SHA-256 audit logs
 │   │   └── main.py                  # Server entrypoint with CORS & lifespan initialization
-│   └── tests/                       # 33 Unit & integration tests
+│   └── tests/                       # 75+ Unit, security & integration tests
 ├── frontend/                        # Next.js 15 App Router Frontend (Tailwind, Lucide)
 │   ├── src/app/                     # Dashboard (/), Upload (/upload), Dossier (/cases/[id])
 │   ├── src/lib/                     # Type-safe API client (api.ts)
@@ -98,8 +98,8 @@ venv\Scripts\activate      # Windows (or source venv/bin/activate on Unix)
 # Install dependencies
 pip install -r requirements.txt
 
-# Run automated test suite (33 passing tests)
-pytest
+# Run automated test suite (75+ passing tests)
+PYTHONPATH=..:. pytest -v
 
 # Start FastAPI development server
 uvicorn app.main:app --reload --port 8000
@@ -126,7 +126,10 @@ Web application dashboard: `http://localhost:3000`
 
 ---
 
-## 🔒 Security & Data Minimization
+## 🔒 Security, Trust Boundary & Governance
+- **Reviewer Identity Trust Boundary:** Caller-supplied `reviewer_id` and `reviewer_role` are strictly prevented from overriding authenticated identity. In production, unsafe dev defaults fail startup; in dev mode, self-reported identities are explicitly labeled `dev_unauthenticated:<id>` in audit logs.
+- **Financial Exposure Semantics:** Distinguishes claimed GST from illustrative potential statutory liability under CGST Sec 16(2)(c), Sec 74 (100% penalty for willful misstatement), and Sec 50 (18% interest). Clearly labeled as uncalibrated decision-support heuristics.
+- **Fail-Closed Policy:** Inferred 18% GST breakdown, zero-tax invoices without exemption proof, corrupt documents, and incomplete research dimensions fail closed to `MANUAL REVIEW` (never clean `PASS`).
 - **Banking Privacy:** Bank account numbers are masked in all logs, displays, and audit exports (`XXXX-XXXX-9921`).
 - **Statutory Invariant:** IFSC verification checks branch and bank entity existence; it is **never** overclaimed as proof of account ownership.
 - **Checksum Verification:** Format-valid GSTINs are tested via Modulo 36 checksum calculation; active status is never assumed without authoritative live proof.

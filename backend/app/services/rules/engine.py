@@ -70,19 +70,51 @@ class DeterministicRuleEngine:
                 return v.get("status") in (ExtractionStatus.INFERRED, ExtractionStatus.INFERRED.value)
             return False
 
-        if any(_check_inferred(v) for v in invoice.extraction_metadata.values()):
+        if invoice.tax_inferred or any(_check_inferred(v) for v in invoice.extraction_metadata.values()):
             rule = RuleTrigger(
                 rule_id="RULE_TAX_INFERRED_UNCERTAINTY",
                 rule_name="Inferred Tax Breakdown",
-                severity="LOW",
-                weight=10,
+                severity="MEDIUM",
+                weight=15,
                 is_hard_gate=False,
                 reason_code="TAX_BREAKDOWN_INFERRED",
                 description="Tax breakdown was inferred/estimated rather than extracted as explicit invoice facts."
             )
             triggered_rules.append(rule)
             reason_codes.append("TAX_BREAKDOWN_INFERRED")
-            score -= 10
+            score -= 15
+
+        # --- Rule 4: Zero-Tax / Missing Tax Specification ---
+        total_tax = round(invoice.cgst + invoice.sgst + invoice.igst, 2)
+        if invoice.total_amount > 0 and total_tax == 0.0:
+            rule = RuleTrigger(
+                rule_id="RULE_ZERO_TAX_INVOICE",
+                rule_name="Zero-Tax / Missing Tax Specification",
+                severity="MEDIUM",
+                weight=15,
+                is_hard_gate=False,
+                reason_code="ZERO_TAX_UNVERIFIED",
+                description="Invoice has zero GST tax claimed. Requires human review to verify tax exemption or export/SEZ documentation."
+            )
+            triggered_rules.append(rule)
+            reason_codes.append("ZERO_TAX_UNVERIFIED")
+            missing_evidence_items.append("Tax Exemption Certificate / LUT / Export Proof")
+            score -= 15
+
+        # --- Rule 5: Extraction Errors / Parsing Failures ---
+        if invoice.parsing_errors:
+            rule = RuleTrigger(
+                rule_id="RULE_PARSING_EXTRACTION_FAILURE",
+                rule_name="Invoice Extraction Failure",
+                severity="HIGH",
+                weight=30,
+                is_hard_gate=False,
+                reason_code="PARSING_EXTRACTION_ERROR",
+                description="Invoice parsing failed. Fail-closed policy requires manual document inspection."
+            )
+            triggered_rules.append(rule)
+            reason_codes.append("PARSING_EXTRACTION_ERROR")
+            score -= 30
 
         # --- Evaluate Field-Level Checks from Evidence Reconciliation ---
         for check in field_checks:
@@ -213,7 +245,14 @@ class DeterministicRuleEngine:
         critical_block_gates = {"GST_STATUS_INACTIVE_CONFIRMED", "CRITICAL_NAME_MISMATCH"}
         if any(gate in critical_block_gates for gate in hard_gates_triggered):
             recommendation = RecommendationOutcome.BLOCK
-        elif hard_gates_triggered or len(reason_codes) > 0 or score < 75:
+        elif (
+            hard_gates_triggered 
+            or len(reason_codes) > 0 
+            or score < 75 
+            or invoice.tax_inferred 
+            or (invoice.total_amount > 0 and total_tax == 0.0) 
+            or len(invoice.parsing_errors) > 0
+        ):
             recommendation = RecommendationOutcome.MANUAL_REVIEW
         else:
             recommendation = RecommendationOutcome.PASS

@@ -8,11 +8,14 @@ class ReviewSubmissionRequest(BaseModel):
     """
     Client submission payload for human review actions.
     Separates client-provided review intent from server-owned identifiers.
+    In authenticated mode, caller-supplied reviewer_id/reviewer_role are ignored
+    in favor of the server-authenticated token identity.
+    In dev mode, any self-reported reviewer_id is explicitly prefixed with 'dev_unauthenticated:'.
     """
     action: ReviewActionType
     rationale: str
-    reviewer_id: Optional[str] = "analyst"
-    reviewer_role: Optional[str] = "ap_analyst"
+    reviewer_id: Optional[str] = None
+    reviewer_role: Optional[str] = None
     requested_documents: List[str] = Field(default_factory=list)
 
 class ReviewAction(BaseModel):

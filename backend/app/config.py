@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator
 from typing import List
 import os
 
@@ -39,5 +40,14 @@ class Settings(BaseSettings):
     
     # Rules
     RULES_VERSION: str = "2.0.0"
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "Settings":
+        if self.ENVIRONMENT.lower() == "production":
+            if self.REVIEWER_DEV_MODE:
+                raise ValueError("Insecure configuration: REVIEWER_DEV_MODE cannot be enabled in production environment.")
+            if not self.DEV_REVIEWER_TOKEN or self.DEV_REVIEWER_TOKEN == "vendorshield-dev-review-token-2026":
+                raise ValueError("Insecure configuration: Production mode rejects the default dev reviewer token. Configure a secure, explicit reviewer token.")
+        return self
 
 settings = Settings()

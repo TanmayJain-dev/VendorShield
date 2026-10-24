@@ -76,7 +76,7 @@ def test_clean_review_contract_server_generated_ids():
     # Server generated trusted IDs
     assert review["action_id"].startswith("act_")
     assert review["case_id"] == case_id
-    assert review["reviewer_id"] == "auditor_jane"
+    assert review["reviewer_id"] == "dev_unauthenticated:auditor_jane"
     assert review["auth_mode"] == "DEV_MODE_UNAUTHENTICATED"
     assert review["action"] == "APPROVE"
 

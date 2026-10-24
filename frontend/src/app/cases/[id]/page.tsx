@@ -271,7 +271,7 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
                     Recommendation: {assessment.recommendation}
                   </h2>
                   <span className="text-xs font-mono text-slate-400">
-                    &bull; Policy Compliance Score: <strong className="text-white">{assessment.risk_score}</strong>/100
+                    &bull; Policy Compliance Score: <strong className="text-white">{assessment.risk_score}</strong>/100 (Uncalibrated Heuristic Indicator)
                   </span>
                 </div>
                 <p className="text-xs text-slate-300 mt-1">
@@ -304,15 +304,20 @@ export default function CaseDossierPage({ params }: { params: Promise<{ id: stri
             </div>
           </div>
 
+          {/* Decision Support & Limitations Banner */}
+          <div className="mt-3 px-3 py-1.5 rounded bg-slate-900/60 border border-slate-800 text-[10px] text-slate-400 font-mono">
+            <strong>DECISION-SUPPORT NOTICE:</strong> Scores and exposure figures are uncalibrated deterministic heuristics for human analyst prioritization. They do not constitute formal tax assessments or guaranteed legal liabilities.
+          </div>
+
           {/* Direct Rupee Financial Liability (CGST Sec 16(2)(c)) */}
           {assessment.itc_exposure && (
             <div className="mt-4 pt-4 border-t border-slate-800/80 bg-slate-950/60 rounded-lg p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
               <div>
                 <span className="text-[10px] font-mono uppercase text-slate-400 block tracking-wider">
-                  Direct Statutory Liability &bull; CGST Sec 16(2)(c) &amp; Sec 74
+                  Estimated Potential Exposure &bull; CGST Sec 16(2)(c) &amp; Sec 74 (Decision-Support Projection)
                 </span>
                 <div className="text-white font-medium mt-0.5">
-                  Claimed ITC: <strong className="text-cyan-300 font-mono">&#8377;{assessment.itc_exposure.tax_amount_claimed.toLocaleString('en-IN')}</strong> &bull; Total Exposure: <strong className="text-rose-400 font-mono">&#8377;{assessment.itc_exposure.total_financial_liability_inr.toLocaleString('en-IN')}</strong> (incl. 100% penalty)
+                  Claimed GST: <strong className="text-cyan-300 font-mono">&#8377;{assessment.itc_exposure.tax_amount_claimed.toLocaleString('en-IN')}</strong> &bull; Estimated Potential Liability: <strong className="text-rose-400 font-mono">&#8377;{assessment.itc_exposure.total_financial_liability_inr.toLocaleString('en-IN')}</strong> (illustrative recovery + penalty/interest if contested)
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1 italic">
                   &ldquo;{assessment.itc_exposure.cfo_advisory}&rdquo;

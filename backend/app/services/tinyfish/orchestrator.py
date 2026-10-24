@@ -134,6 +134,20 @@ class MultiHopTinyFishOrchestrator:
                     is_authoritative=False,
                     is_fallback=False
                 ))
+        else:
+            evidence_items.append(EvidenceItem(
+                evidence_id="ev_hop1_gst_missing_input",
+                source_url="https://service.gst.gov.in/services/searchtp",
+                source_name="GSTN Statutory Registry [Hop 1: Missing Input]",
+                claim_supported="Legal Entity Standing & Constitution",
+                source_type="GOVERNMENT_REGISTRY",
+                source_mode=SourceMode.UNAVAILABLE,
+                retrieved_at=now,
+                raw_excerpt="No GSTIN provided on invoice; Hop 1 statutory lookup could not be executed.",
+                facts={"status": "UNAVAILABLE", "reason": "MISSING_GSTIN"},
+                is_authoritative=False,
+                is_fallback=False
+            ))
 
         # --- HOP 2: Director Portfolio & Shell Contagion Traversal ---
         query_hop2 = f"https://www.zaubacorp.com/company-directors/{supplier_name.replace(' ', '-')}"
@@ -268,6 +282,20 @@ class MultiHopTinyFishOrchestrator:
                     is_authoritative=False,
                     is_fallback=False
                 ))
+        else:
+            evidence_items.append(EvidenceItem(
+                evidence_id="ev_hop3_geo_missing_input",
+                source_url="https://maps.google.com",
+                source_name="Spatial Geo-Cluster Analysis [Hop 3: Missing Input]",
+                claim_supported="Physical Grounding & Address Hub Analysis",
+                source_type="GEO_DIRECTORY",
+                source_mode=SourceMode.UNAVAILABLE,
+                retrieved_at=now,
+                raw_excerpt="No billing address provided on invoice; Hop 3 physical grounding lookup could not be executed.",
+                facts={"status": "UNAVAILABLE", "reason": "MISSING_ADDRESS"},
+                is_authoritative=False,
+                is_fallback=False
+            ))
 
         # --- HOP 4: Regulatory, NCLT & Litigation Sweep ---
         query_hop4 = "https://nclt.gov.in/case-status"

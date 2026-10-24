@@ -60,7 +60,8 @@ def test_create_and_investigate_case():
     assert review_resp.status_code == 200
     final_case = review_resp.json()
     assert final_case["status"] == CaseStatus.RESOLVED.value
-    assert final_case["review"]["reviewer_id"] == "tanmay_lead"
+    assert final_case["review"]["reviewer_id"] == "dev_unauthenticated:tanmay_lead"
+    assert final_case["review"]["auth_mode"] == "DEV_MODE_UNAUTHENTICATED"
 
     # 4. Export Audit Report
     report_resp = client.get(f"/api/cases/{case_id}/report")

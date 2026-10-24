@@ -10,6 +10,9 @@ def test_rule_engine_clean_pass():
         invoice_number="INV-001",
         supplier_name="Genuine Vendor Pvt Ltd",
         gstin="07AAAAA0000A1Z5",
+        taxable_amount=8474.58,
+        cgst=762.71,
+        sgst=762.71,
         total_amount=10000.0,
         gstin_format_valid=True,
         arithmetic_valid=True
@@ -33,6 +36,9 @@ def test_rule_engine_hard_gate_gst_inactive():
         invoice_number="INV-002",
         supplier_name="Suspended Vendor",
         gstin="07AAAAA0000A1Z5",
+        taxable_amount=42372.88,
+        cgst=3813.56,
+        sgst=3813.56,
         total_amount=50000.0,
         gstin_format_valid=True,
         arithmetic_valid=True
@@ -56,6 +62,9 @@ def test_rule_engine_benchmark_apex_courier():
         invoice_number="INV-2026-8841",
         supplier_name="Apex Courier",
         gstin="07AAAAA0000A1Z5",
+        taxable_amount=408898.31,
+        cgst=36800.85,
+        sgst=36800.85,
         total_amount=482500.0,
         gstin_format_valid=True,
         arithmetic_valid=True

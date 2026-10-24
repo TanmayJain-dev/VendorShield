@@ -33,27 +33,41 @@ def resolve_reviewer_identity(
     """
     Validates reviewer identity.
     
-    TRUST BOUNDARY LIMITATION (DOCUMENTED):
-    In development mode (REVIEWER_DEV_MODE=True), this application does NOT enforce cryptographically
-    signed SSO or OAuth2 sessions. A shared developer token or self-reported analyst identity is accepted
-    for hackathon demonstration, tagged explicitly with `DEV_MODE_UNAUTHENTICATED` in all audit events.
-    In production deployments, this MUST be replaced by an authoritative OIDC/SAML enterprise identity provider.
+    TRUST BOUNDARY ENFORCEMENT:
+    - Production mode MUST reject default dev tokens and require an explicit secure reviewer token.
+    - If a token is supplied, it is validated against the configured token; invalid tokens return 401.
+    - If no token is provided, dev mode (REVIEWER_DEV_MODE=True) permits unauthenticated access,
+      which explicitly prefixes self-reported identities with 'dev_unauthenticated:' and tags audit logs.
     """
+    # Production safety guardrail
+    if settings.ENVIRONMENT.lower() == "production" and (
+        settings.REVIEWER_DEV_MODE or settings.DEV_REVIEWER_TOKEN == "vendorshield-dev-review-token-2026"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Production configuration error: Insecure reviewer authentication defaults cannot be used in production."
+        )
+
     token = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split("Bearer ", 1)[1].strip()
     elif x_reviewer_token:
         token = x_reviewer_token.strip()
 
-    # If valid configured dev token is present
-    if token and token == settings.DEV_REVIEWER_TOKEN:
-        return {
-            "reviewer_id": "authorized_ap_reviewer",
-            "reviewer_role": "compliance_officer",
-            "auth_mode": "BEARER_TOKEN_AUTHENTICATED"
-        }
+    # If an explicit token is supplied, validate it strictly (do NOT fall through to dev mode)
+    if token is not None:
+        if token == settings.DEV_REVIEWER_TOKEN and token != "":
+            return {
+                "reviewer_id": "authorized_ap_reviewer",
+                "reviewer_role": "compliance_officer",
+                "auth_mode": "AUTHORITATIVE_TOKEN_AUTHENTICATED" if settings.ENVIRONMENT.lower() == "production" else "PRESHARED_DEV_TOKEN_AUTHENTICATED"
+            }
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized: Invalid reviewer authorization token."
+        )
 
-    # Development-only mode fallback
+    # If no token is supplied, check dev mode fallback
     if settings.REVIEWER_DEV_MODE:
         return {
             "reviewer_id": "dev_analyst",
@@ -130,13 +144,24 @@ async def submit_review_decision(
 
     # 5. Generate server-owned review record with trusted identifiers
     server_action_id = f"act_{uuid.uuid4().hex[:12]}"
-    effective_reviewer = review_in.reviewer_id.strip() if review_in.reviewer_id else auth_ctx["reviewer_id"]
+    
+    # Invariant: Caller-supplied reviewer_id / reviewer_role CANNOT override authenticated identity
+    if auth_ctx.get("auth_mode") != "DEV_MODE_UNAUTHENTICATED":
+        # Authenticated mode: strictly enforce server-authenticated identity
+        effective_reviewer = auth_ctx["reviewer_id"]
+        effective_role = auth_ctx.get("reviewer_role", "compliance_officer")
+    else:
+        # Dev unauthenticated mode: explicitly label self-reported identities as unauthenticated
+        raw_id = (review_in.reviewer_id or auth_ctx["reviewer_id"]).strip()
+        effective_reviewer = raw_id if raw_id.startswith("dev_unauthenticated:") else f"dev_unauthenticated:{raw_id}"
+        raw_role = (review_in.reviewer_role or auth_ctx.get("reviewer_role", "ap_analyst")).strip()
+        effective_role = raw_role if raw_role.startswith("dev_unauthenticated:") else f"dev_unauthenticated:{raw_role}"
 
     persisted_review = ReviewAction(
         action_id=server_action_id,
         case_id=case_id,
         reviewer_id=effective_reviewer,
-        reviewer_role=review_in.reviewer_role or auth_ctx.get("reviewer_role", "ap_analyst"),
+        reviewer_role=effective_role,
         action=review_in.action,
         rationale=review_in.rationale.strip(),
         requested_documents=review_in.requested_documents or [],

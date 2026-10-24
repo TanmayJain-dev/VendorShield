@@ -563,13 +563,15 @@ def parse_invoice_text(
 
     # 8. Handling Un-extracted Tax: DO NOT SILENTLY ASSUME 18% GST AS GROUND TRUTH
     tax_inferred = False
+    tax_inference_reason = None
     if not (cgst_extracted or sgst_extracted or igst_extracted):
         if taxable_extracted and total_amount > taxable_amount:
             diff_tax = round(total_amount - taxable_amount - round_off + discount_amount, 2)
+            tax_inferred = True
+            tax_inference_reason = f"Tax breakdown not explicitly detailed in invoice text; residual tax ₹{diff_tax:.2f}."
             warnings.append(
                 f"Tax breakdown is not explicitly detailed in invoice text. Residual tax amount: ₹{diff_tax:.2f}."
             )
-            tax_inferred = True
             extraction_meta["cgst"] = FieldExtractionMeta(
                 status=ExtractionStatus.UNAVAILABLE,
                 confidence=0.0,
@@ -592,6 +594,7 @@ def parse_invoice_text(
             sgst = cgst
             igst = 0.0
             tax_inferred = True
+            tax_inference_reason = "Neither taxable amount nor tax breakdown found in document; inferred rough 18% GST estimate."
             warnings.append(
                 "Neither taxable amount nor tax breakdown was found in document. "
                 "Tax figures are rough 18% estimations for guidance only; human confirmation required."
@@ -667,6 +670,8 @@ def parse_invoice_text(
         arithmetic_valid=arith_valid,
         arithmetic_notes=arith_notes,
         raw_text=text[:3000],
+        tax_inferred=tax_inferred,
+        tax_inference_reason=tax_inference_reason,
         extraction_metadata=extraction_meta,
         parsing_errors=errors,
         parsing_warnings=warnings,

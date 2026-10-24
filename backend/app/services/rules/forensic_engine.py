@@ -123,8 +123,27 @@ class ForensicRiskEngine:
             reason_codes.append("NCLT_IBC_INSOLVENCY_PETITION_ACTIVE")
 
         # ----------------------------------------------------
-        # 7. Check Field Reconciliations & Basic Rules
-        # ----------------------------------------------------
+        # Check parser confidence & fail-closed tax rules
+        total_tax = round(invoice.cgst + invoice.sgst + invoice.igst, 2)
+        def _is_inferred(m):
+            if hasattr(m, "status"):
+                return m.status == ExtractionStatus.INFERRED
+            if isinstance(m, dict):
+                return m.get("status") in (ExtractionStatus.INFERRED, ExtractionStatus.INFERRED.value)
+            return False
+
+        if invoice.tax_inferred or any(_is_inferred(m) for m in invoice.extraction_metadata.values()):
+            if "TAX_BREAKDOWN_INFERRED" not in reason_codes:
+                reason_codes.append("TAX_BREAKDOWN_INFERRED")
+
+        if invoice.total_amount > 0 and total_tax == 0.0:
+            if "ZERO_TAX_UNVERIFIED" not in reason_codes:
+                reason_codes.append("ZERO_TAX_UNVERIFIED")
+
+        if invoice.parsing_errors:
+            if "PARSING_EXTRACTION_ERROR" not in reason_codes:
+                reason_codes.append("PARSING_EXTRACTION_ERROR")
+
         if invoice.gstin_format_valid is False:
             hard_gates_triggered.append("GSTIN_FORMAT_INVALID")
             reason_codes.append("GSTIN_FORMAT_INVALID")
@@ -260,7 +279,14 @@ class ForensicRiskEngine:
         ]
         if any(g in hard_gates_triggered for g in critical_blockers):
             recommendation = RecommendationOutcome.BLOCK
-        elif hard_gates_triggered or len(reason_codes) > 0 or score < 75:
+        elif (
+            hard_gates_triggered 
+            or len(reason_codes) > 0 
+            or score < 75 
+            or invoice.tax_inferred 
+            or (invoice.total_amount > 0 and total_tax == 0.0) 
+            or len(invoice.parsing_errors) > 0
+        ):
             recommendation = RecommendationOutcome.MANUAL_REVIEW
         else:
             recommendation = RecommendationOutcome.PASS

@@ -144,3 +144,92 @@ async def test_multihop_orchestrator_malformed_live_response():
         )
 
     assert len(evidence) >= 1
+
+@pytest.mark.asyncio
+async def test_hop1_succeeds_hops_2_to_4_fail_downgrades_pass_to_manual_review():
+    """
+    Evidence Completeness Rule Invariant:
+    When Hop 1 succeeds but Hops 2-4 fail, all unavailable dimensions must be
+    explicitly recorded, evidence_completeness must be PARTIAL (never COMPLETE),
+    and the final policy recommendation must fail closed to MANUAL_REVIEW (never PASS).
+    """
+    from backend.app.services.rules.forensic_engine import ForensicRiskEngine
+    from backend.app.schemas.invoice import InvoiceClaim
+    from backend.app.schemas.enums import RecommendationOutcome
+
+    orchestrator = MultiHopTinyFishOrchestrator(api_key="tf_live_test_key_123")
+
+    mock_resp_success = MagicMock()
+    mock_resp_success.status_code = 200
+    mock_resp_success.json.return_value = {
+        "result": "GSTIN 07AAAAA0000A1Z5 Active",
+        "extracted_facts": {
+            "status": "Active",
+            "legal_name": "Apex Courier Private Limited",
+            "trade_name": "Apex Courier",
+            "filing_delay_months": 0
+        }
+    }
+
+    mock_resp_fail = MagicMock()
+    mock_resp_fail.status_code = 503
+    mock_resp_fail.text = "Service Unavailable"
+
+    mock_client = AsyncMock()
+    # Hop 1 succeeds, Hops 2, 3, 4 fail
+    mock_client.post.side_effect = [mock_resp_success, mock_resp_fail, mock_resp_fail, mock_resp_fail]
+
+    with patch("httpx.AsyncClient") as mock_client_cls:
+        mock_client_cls.return_value.__aenter__.return_value = mock_client
+        evidence, directors, address, litigation = await orchestrator.execute_investigation(
+            supplier_name="Apex Courier",
+            gstin="07AAAAA0000A1Z5",
+            address="Plot 44, Okhla Phase 3, New Delhi"
+        )
+
+    # 1. Verify all 4 research dimensions are explicitly represented
+    assert len(evidence) == 4
+    hop1 = next(e for e in evidence if "ev_hop1" in e.evidence_id)
+    hop2 = next(e for e in evidence if "ev_hop2" in e.evidence_id)
+    hop3 = next(e for e in evidence if "ev_hop3" in e.evidence_id)
+    hop4 = next(e for e in evidence if "ev_hop4" in e.evidence_id)
+
+    assert hop1.source_mode == SourceMode.LIVE
+    assert hop1.is_authoritative is True
+
+    assert hop2.source_mode == SourceMode.UNAVAILABLE
+    assert hop3.source_mode == SourceMode.UNAVAILABLE
+    assert hop4.source_mode == SourceMode.UNAVAILABLE
+
+    # 2. Evaluate with ForensicRiskEngine
+    invoice = InvoiceClaim(
+        invoice_number="INV-2026-001",
+        invoice_date="2026-10-20",
+        supplier_name="Apex Courier",
+        legal_name="Apex Courier Private Limited",
+        gstin="07AAAAA0000A1Z5",
+        taxable_amount=100000.0,
+        cgst=9000.0,
+        sgst=9000.0,
+        total_amount=118000.0,
+        gstin_format_valid=True,
+        arithmetic_valid=True,
+        raw_text="Sample clean invoice text"
+    )
+
+    forensic_engine = ForensicRiskEngine()
+    assessment = forensic_engine.evaluate(
+        case_id="case_multihop_partial",
+        invoice=invoice,
+        field_checks=[],
+        directors=directors,
+        address_cluster=address,
+        litigation_meta=litigation,
+        evidence_items=evidence
+    )
+
+    # 3. Assert evidence completeness is PARTIAL, not COMPLETE
+    assert assessment.evidence_completeness == "PARTIAL"
+    # 4. Invariant: Recommendation MUST be MANUAL_REVIEW, NEVER PASS
+    assert assessment.recommendation == RecommendationOutcome.MANUAL_REVIEW
+    assert "INCOMPLETE_EVIDENCE_FAIL_CLOSED" in assessment.reason_codes

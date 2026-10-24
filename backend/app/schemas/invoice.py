@@ -49,6 +49,8 @@ class InvoiceClaim(BaseModel):
     raw_text: Optional[str] = None
 
     # Extraction provenance & uncertainty
+    tax_inferred: bool = False
+    tax_inference_reason: Optional[str] = None
     extraction_metadata: Dict[str, FieldExtractionMeta] = Field(default_factory=dict)
     parsing_errors: List[str] = Field(default_factory=list)
     parsing_warnings: List[str] = Field(default_factory=list)

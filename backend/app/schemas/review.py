@@ -1,11 +1,12 @@
+import uuid
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime, timezone
 from .enums import ReviewActionType
 
 class ReviewAction(BaseModel):
-    action_id: str
-    case_id: str
+    action_id: str = Field(default_factory=lambda: f"act_{uuid.uuid4().hex[:12]}")
+    case_id: Optional[str] = None
     reviewer_id: str
     reviewer_role: str = "ap_analyst"
     action: ReviewActionType

@@ -1,0 +1,14 @@
+{
+  "filename": "08_duplicate_pair_b.pdf",
+  "supplier_name": "Precision Engineering Works",
+  "gstin": "07AABCB1234F1ZA",
+  "buyer_gstin": "07ABCDE1234F1Z2",
+  "invoice_number": "INV-2026-DUP-77",
+  "invoice_date": "2026-10-21",
+  "total_amount": 47200.0,
+  "taxable_amount": 40000.0,
+  "cgst": 3600.0,
+  "sgst": 3600.0,
+  "igst": 0.0,
+  "expected_verdict": "MANUAL_REVIEW"
+}

@@ -1,0 +1,14 @@
+{
+  "filename": "09_reuse_different_amount.pdf",
+  "supplier_name": "Precision Engineering Works",
+  "gstin": "07AABCB1234F1ZA",
+  "buyer_gstin": "07ABCDE1234F1Z2",
+  "invoice_number": "INV-2026-DUP-77",
+  "invoice_date": "2026-10-22",
+  "total_amount": 94400.0,
+  "taxable_amount": 80000.0,
+  "cgst": 7200.0,
+  "sgst": 7200.0,
+  "igst": 0.0,
+  "expected_verdict": "MANUAL_REVIEW"
+}

@@ -2,9 +2,9 @@ name: VendorShield CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, mvp/real-invoices ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, mvp/real-invoices ]
 
 jobs:
   backend-test:
@@ -22,16 +22,16 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: backend/requirements-dev.txt
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: Run Pytest Suite
         run: |
-          PYTHONPATH=..:. pytest -v --maxfail=1
+          PYTHONPATH=..:. pytest -q --maxfail=1
 
   frontend-build:
     name: Frontend Typecheck & Build
@@ -63,3 +63,30 @@ jobs:
 
       - name: Build Next.js Production App
         run: pnpm build
+
+  server-health-check:
+    name: Server Boot & Health Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install Backend Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Boot Server from .env.example
+        run: |
+          cp .env.example backend/.env
+          cd backend
+          PYTHONPATH=..:. python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+          sleep 4
+          curl -f -v http://127.0.0.1:8000/health || exit 1

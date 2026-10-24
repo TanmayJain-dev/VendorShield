@@ -1,0 +1,14 @@
+{
+  "filename": "10_missing_gstin.pdf",
+  "supplier_name": "Unregistered Local Vendors",
+  "gstin": null,
+  "buyer_gstin": "07ABCDE1234F1Z2",
+  "invoice_number": "INV-2026-0010",
+  "invoice_date": "2026-10-22",
+  "total_amount": 15000.0,
+  "taxable_amount": 15000.0,
+  "cgst": 0.0,
+  "sgst": 0.0,
+  "igst": 0.0,
+  "expected_verdict": "MANUAL_REVIEW"
+}

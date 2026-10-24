@@ -61,6 +61,10 @@ def load_users() -> Dict[str, User]:
             users_by_token["dev-analyst-token"] = User(id="priya", role="ap_analyst", token="dev-analyst-token")
         if "dev-reviewer-token" not in users_by_token:
             users_by_token["dev-reviewer-token"] = User(id="garv", role="reviewer", token="dev-reviewer-token")
+        if "garv-reviewer-token-2026" not in users_by_token:
+            users_by_token["garv-reviewer-token-2026"] = User(id="garv", role="reviewer", token="garv-reviewer-token-2026")
+        if "priya-analyst-token-2026" not in users_by_token:
+            users_by_token["priya-analyst-token-2026"] = User(id="priya", role="ap_analyst", token="priya-analyst-token-2026")
         if "vendorshield-dev-review-token-2026" not in users_by_token:
             users_by_token["vendorshield-dev-review-token-2026"] = User(
                 id="authorized_ap_reviewer",

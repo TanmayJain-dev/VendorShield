@@ -38,7 +38,7 @@ IFSC_REGEX = re.compile(r"\b([A-Z]{4}0[A-Z0-9]{6})\b")
 ACCOUNT_NUM_REGEX = re.compile(r"(?:A/C|Account\s*(?:No|Number)?|Bank\s*A/c)[\s.:]*([0-9]{9,18})", re.IGNORECASE)
 
 TOTAL_AMOUNT_REGEX = re.compile(
-    r"(?<!Sub\s)(?<!Taxable\s)\b(?:Total\s*Invoice\s*Value|Grand\s*Total|Invoice\s*Total|Net\s*Payable|Total\s*Amount|Total\s*Due|Total)\b[\s.:]*"
+    r"(?<!Sub\s)(?<!Taxable\s)\b(?:Total\s*Invoice\s*Amount|Total\s*Invoice\s*Value|Grand\s*Total|Invoice\s*Total|Net\s*Payable|Total\s*Amount|Total\s*Due|Total)\b[\s.:]*"
     r"(?:₹|INR|Rs\.?)?\s*([\d,]+\.?\d*)",
     re.IGNORECASE
 )
@@ -47,9 +47,9 @@ TAXABLE_AMOUNT_REGEX = re.compile(
     r"(?:₹|INR|Rs\.?)?\s*([\d,]+\.?\d*)",
     re.IGNORECASE
 )
-CGST_REGEX = re.compile(r"CGST(?:\s*(?:@|at)?\s*([0-9.]+)\s*%)?[\s.:]*(?:₹|INR|Rs\.?)?\s*([\d,]+\.?\d*)", re.IGNORECASE)
-SGST_REGEX = re.compile(r"(?:SGST|UTGST|State\s*GST)(?:\s*(?:@|at)?\s*([0-9.]+)\s*%)?[\s.:]*(?:₹|INR|Rs\.?)?\s*([\d,]+\.?\d*)", re.IGNORECASE)
-IGST_REGEX = re.compile(r"IGST(?:\s*(?:@|at)?\s*([0-9.]+)\s*%)?[\s.:]*(?:₹|INR|Rs\.?)?\s*([\d,]+\.?\d*)", re.IGNORECASE)
+CGST_REGEX = re.compile(r"CGST(?:\s*\(?(?:@|at)?\s*([0-9.]+)\s*%\)?)?[\s.:]*(?:₹|INR|Rs\.?)?\s*([\d,]+\.?\d*)", re.IGNORECASE)
+SGST_REGEX = re.compile(r"(?:SGST|UTGST|State\s*GST)(?:\s*\(?(?:@|at)?\s*([0-9.]+)\s*%\)?)?[\s.:]*(?:₹|INR|Rs\.?)?\s*([\d,]+\.?\d*)", re.IGNORECASE)
+IGST_REGEX = re.compile(r"IGST(?:\s*\(?(?:@|at)?\s*([0-9.]+)\s*%\)?)?[\s.:]*(?:₹|INR|Rs\.?)?\s*([\d,]+\.?\d*)", re.IGNORECASE)
 ROUND_OFF_REGEX = re.compile(r"(?:Round\s*Off|Rounding)[\s.:]*(?:₹|INR|Rs\.?)?\s*([+\-]?[\d,]+\.?\d*)", re.IGNORECASE)
 DISCOUNT_REGEX = re.compile(r"(?:Discount)[\s.:]*(?:₹|INR|Rs\.?)?\s*([\d,]+\.?\d*)", re.IGNORECASE)
 

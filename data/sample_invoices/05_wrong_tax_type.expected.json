@@ -1,0 +1,14 @@
+{
+  "filename": "05_wrong_tax_type.pdf",
+  "supplier_name": "Apex Global Logistics Pvt Ltd",
+  "gstin": "07AABCB1234F1ZA",
+  "buyer_gstin": "07ABCDE1234F1Z2",
+  "invoice_number": "INV-2026-0005",
+  "invoice_date": "2026-10-19",
+  "total_amount": 23600.0,
+  "taxable_amount": 20000.0,
+  "cgst": 0.0,
+  "sgst": 0.0,
+  "igst": 3600.0,
+  "expected_verdict": "MANUAL_REVIEW"
+}

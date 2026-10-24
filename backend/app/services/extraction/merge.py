@@ -136,6 +136,9 @@ def merge_extractions(
         )
 
     # Defaults for core fields
+    # Ensure gstin alias exists in metadata
+    if "supplier_gstin" in metadata and "gstin" not in metadata:
+        metadata["gstin"] = metadata["supplier_gstin"]
     invoice_number = str(merged.get("invoice_number") or "UNKNOWN-INV").strip()
     supplier_name = str(merged.get("supplier_name") or "Unknown Supplier").strip()
     gstin = merged.get("supplier_gstin")

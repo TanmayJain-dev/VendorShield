@@ -1,0 +1,14 @@
+{
+  "filename": "13_conflicting_einvoice_qr.pdf",
+  "supplier_name": "Zenith Cloud & Networks Ltd",
+  "gstin": "07AABCB1234F1ZA",
+  "buyer_gstin": "07ABCDE1234F1Z2",
+  "invoice_number": "INV-2026-0013",
+  "invoice_date": "2026-10-24",
+  "total_amount": 236000.0,
+  "taxable_amount": 200000.0,
+  "cgst": 18000.0,
+  "sgst": 18000.0,
+  "igst": 0.0,
+  "expected_verdict": "BLOCK"
+}

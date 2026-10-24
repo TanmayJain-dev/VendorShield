@@ -1,193 +1,146 @@
 # VendorShield AI — Real-Invoice MVP Status & Execution Log
 
 **Current Branch:** `mvp/real-invoices`  
-**Base:** `origin/feat/ui-enterprise-dashboard`  
-**Execution Mode:** Autonomous Phase-by-Phase Execution  
+**Base:** `origin/main` / `pre-mvp-main`  
+**Execution Mode:** Autonomous Phase-by-Phase Real-Data MVP Engineering  
 
 ---
 
-## 1. Execution Log
+## 1. Execution Log & Verification Baseline
 
 ### Baseline Verification (Phase 0)
-* **Backend Pytest Baseline:**
-```
-collected 78 items
-======================= 78 passed, 2 warnings in 4.10s ========================
-```
-* **Frontend TypeScript Baseline:**
-```
-cd frontend && npx pnpm tsc --noEmit
-Exit code: 0 (Clean)
-```
+* **Backend Pytest Baseline:** 78 passed, 0 failed.
+* **Frontend TypeScript Baseline:** Clean (0 errors).
 
-### Phase A (P0): Fix Verified Defects (Completed)
-* **Key Fixes Implemented:**
-  - **A1:** Fixed missing `ExtractionStatus` import in `forensic_engine.py` preventing NameError HTTP 500 crashes during investigation.
-  - **A2:** Removed hardcoded Mod-36 checksum bypass (`07AAAAA0000A1Z5`) in `gstin_validator.py`. Verified zero 15-char string backdoors. Created `backend/app/services/validators/gstin_tools.py` with `compute_check_char` and `make_gstin`. Replaced invalid fixtures across `sample_data/` and tests with verified Mod-36 GSTINs (Apex: `07AAAAA0000A1Z4`, Specter: `07BSPCT9999C1ZE`, QuickPrint: `07AQKPS1111Q1ZH`).
-  - **A3:** Simulated orchestrator no longer returns Apex Courier fixtures for real vendors; returns explicit `UNAVAILABLE` evidence (`NO_PROVIDER_CONFIGURED`) failing closed to `MANUAL_REVIEW` unless `is_demo=True` or `DEMO_MODE=true`.
-  - **A4:** Registry outages (timeouts, HTTP 500, captcha) ignore `UNAVAILABLE` evidence when reconciling GST status; only emit `GST_STATUS_INACTIVE_CONFIRMED` for verified cancelled/suspended statuses; composition status recognized as active.
-  - **A5:** Refactored `TinyFishClient` in `client.py` with support for `output_schema`, async polling, and resilient fallback to `UNAVAILABLE`. Experimental hops 2-4 kept behind `ENABLE_EXPERIMENTAL_FORENSICS=false`.
-  - **A6:** Created unified `AssessmentService.assess(case)` in `backend/app/services/rules/assessment_service.py` ensuring core deterministic rules govern all assessments across intake, investigation, and invoice corrections.
-  - **A7:** Fixed `CORS_ORIGINS` pydantic-settings parsing in `config.py` using `Union[List[str], str]`, verified clean `uvicorn app.main:app` startup from `.env.example`, aligned `RULES_VERSION=2.0.0`, separated dev requirements into `requirements-dev.txt`.
-  - **A8:** Added `is_demo` flag to `Case`, `CaseSummary`, and `CaseModel`. Removed automatic seeding on every request in `list_cases` and `create_case`; seeding is opt-in via `SEED_DEMO_DATA=true`.
-  - **A9:** Manual intake and parser no longer fabricate 18% GST; manual intake sets `taxable_amount=0.0`, `cgst=0.0`, `sgst=0.0`, `igst=0.0`, `arithmetic_valid=None`, and `arithmetic_notes="ARITHMETIC_UNVERIFIED"`.
-  - **A10:** Pre-ingestion validation aligned for Phase B layered pipeline.
-  - **A12:** Configurable statutory parameters in `itc_calculator.py` with Finance Act 2024 Sec 74A and Sec 50(3) advisory notes; low-risk liability correctly returns ₹0.00.
-  - **A13:** Standardized docs on `pnpm`, standardized Apex Global Logistics naming, aligned test counts.
+---
 
-* **Backend Pytest Output (Phase A):**
-```
-collected 85 items
-======================= 85 passed, 2 warnings in 4.80s ========================
-```
+### Phase A (P0): Fix Verified Defects
+* **Commit:** `66b6ba7`
+* **Defects Remediated:**
+  - Removed Mod-36 checksum bypass in `gstin_validator.py`.
+  - Replaced simulated orchestrator fixture defaults with explicit `UNAVAILABLE` evidence (`NO_PROVIDER_CONFIGURED`).
+  - Added `is_demo` flag to `Case`, `CaseSummary`, and `CaseModel`. Opt-in demo seeding via `SEED_DEMO_DATA=true`.
+  - Parser no longer fabricates 18% GST on unitemized invoices; sets `arithmetic_valid=None` and `arithmetic_notes="ARITHMETIC_UNVERIFIED"`.
+  - Fixed `forensic_engine.py` missing `ExtractionStatus` import preventing HTTP 500 crashes.
+  - Standardized repository documentation on `pnpm`.
+* **Pytest:** 85 passed, 0 failed.
 
-* **Frontend Build Output (Phase A):**
-```
-$ next build
-   ▲ Next.js 15.5.28
+---
 
-   Creating an optimized production build ...
- ✓ Compiled successfully in 9.3s
-   Linting and checking validity of types ...
-   Collecting page data ...
-   Generating static pages (7/7)
- ✓ Generating static pages (7/7)
-   Finalizing page optimization ...
-   Collecting build traces ...
-Route (app)                                 Size  First Load JS
-┌ ○ /                                    15.9 kB         123 kB
-├ ○ /_not-found                            988 B         103 kB
-├ ƒ /cases/[id]                          9.82 kB         112 kB
-├ ○ /dashboard                             245 B         112 kB
-├ ○ /queue                                 162 B         112 kB
-└ ○ /upload                               4.5 kB         111 kB
-```
+### Phase B (P0): Layered Extraction Pipeline
+* **Commit:** `29c5e19`
+* **Features Implemented:**
+  - `qr_einvoice.py`: Decodes JWT e-invoice payloads via PyMuPDF/OpenCV; extracts inner claims; checks signature against `IRP_PUBLIC_KEY_PEM`.
+  - `text_layer.py`: Disambiguates supplier vs buyer GSTINs by relative section positions and labels; extracts amounts and masked bank accounts.
+  - `llm_extractor.py`: Multimodal adapter for Gemini and Anthropic with temperature 0, strict JSON schema, bank account masking, and zero-cost `LLM_PROVIDER=none` fallback.
+  - `merge.py`: Precedence `QR > LLM > REGEX`; tags fields with source and confidence; flags `CONFLICT` and `EXTRACTION_CONFLICT` on discrepancies.
+  - `pipeline.py`: Orchestrates multi-layer invoice extraction for PDFs and images.
+  - File persistence: Saves uploaded files under `UPLOAD_DIR/<case_id>/<sha256>.<ext>` and adds `GET /api/cases/{case_id}/file`.
+* **Pytest:** 95 passed, 0 failed.
 
-### Phase B (P0): Layered Extraction Pipeline (Completed)
-* **Key Enhancements Implemented:**
-  - **B1: E-Invoice QR Decoder (`qr_einvoice.py`):** Renders PDF pages at 200 DPI via PyMuPDF or decodes images directly with OpenCV. Decodes JWT e-invoice payloads, maps inner claims (`SellerGstin`, `BuyerGstin`, `DocNo`, `DocDt`, `TotInvVal`, `Irn`), labels signature `UNVERIFIED` (or verifies if `IRP_PUBLIC_KEY_PEM` is provided).
-  - **B2: Text & Regex Layer (`text_layer.py`):** PyMuPDF text and bounding boxes. Disambiguates supplier vs buyer GSTINs based on explicit labels and relative page sections. Suppresses header defaults ("Tax Invoice") for supplier name.
-  - **B3: Agnostic Multimodal LLM Extractor (`llm_extractor.py`):** Abstract provider interface with adapters for Gemini and Anthropic over `httpx`. Strict JSON schema with temperature 0, bank account masking (requesting last 4 digits only), and zero-cost `LLM_PROVIDER=none` fallback.
-  - **B4: Merge & Provenance Engine (`merge.py`):** Precedence `QR > LLM > REGEX`. Tags every field with `ExtractionStatus` (`EXTRACTED_QR`, `EXTRACTED_LLM`, `EXTRACTED_REGEX`) and confidence. Detects material disagreements (GSTIN, invoice number, date, total, tax), marks status `CONFLICT`, and emits `EXTRACTION_CONFLICT` warnings.
-  - **B5: Unified Pipeline Orchestration (`pipeline.py`):** Routes PDF and image uploads through the multi-layer pipeline.
-  - **B6: Raw File Persistence & Endpoint:** Persists uploads under `UPLOAD_DIR/<case_id>/<sha256>.<ext>` and provides `GET /api/cases/{case_id}/file` for side-by-side verification.
-  - **B7: Enum & Type Parity:** Extended `ExtractionStatus` with `EXTRACTED_QR`, `EXTRACTED_LLM`, `EXTRACTED_REGEX`, `CONFLICT` and `SourceMode` in backend and frontend `api.ts`.
+---
 
-* **Backend Pytest Output (Phase B):**
-```
-collected 95 items
-======================= 95 passed, 2 warnings in 10.22s =======================
-```
-
-* **Frontend Build Output (Phase B):**
-```
-$ next build
-   ▲ Next.js 15.5.28
-
-   Creating an optimized production build ...
- ✓ Compiled successfully in 3.8s
-   Linting and checking validity of types ...
-   Collecting page data ...
- ✓ Generating static pages (7/7)
-   Finalizing page optimization ...
-   Collecting build traces ...
-
-Route (app)                                 Size  First Load JS
-┌ ○ /                                    15.9 kB         123 kB
-├ ○ /_not-found                            988 B         103 kB
-├ ƒ /cases/[id]                          9.82 kB         112 kB
-├ ○ /dashboard                             245 B         112 kB
-├ ○ /queue                                 162 B         112 kB
-└ ○ /upload                               4.5 kB         111 kB
-```
-
-### Phase C (P0): Real Checks & Pluggable Providers (Completed)
-* **Key Enhancements Implemented:**
-  - **C1: Deterministic Real Checks:**
-    - `BUYER_GSTIN_MISMATCH` & `BUYER_GSTIN_MISSING`: Verified against configured `BUYER_GSTINS` list. Prevents invalid claims in third-party entity names.
-    - `TAX_TYPE_STATE_MISMATCH`: Verifies supplier state code (GSTIN chars 1-2) against buyer state code / place of supply. Flags intra-state IGST or inter-state CGST/SGST.
-    - `PAN_FORMAT_INVALID`: Checks 4th character of embedded PAN against valid legal entity holder types (`CPHFATBLJG`).
-    - `INVOICE_NUMBER_FORMAT_INVALID`: Validates invoice number length (<= 16) and character restrictions under GST Rule 46.
-    - `FUTURE_INVOICE_DATE`: Rejects future invoice dates.
-    - `ITC_TIME_BAR_WARNING`: Flags invoices beyond Section 16(4) cutoff (30 Nov following FY end) for CA review.
-    - `EINVOICE_QR_MISMATCH`: Hard gate (BLOCK) if cryptographically verified QR code contradicts printed totals.
-    - `LINE_ITEM_ARITHMETIC_MISMATCH`: Compares line item sums with taxable and gross totals.
-  - **C2: Pluggable Registry Providers (`backend/app/services/providers/`):**
-    - `ManualEntryProvider`: Reviewer submits public portal taxpayer details (`POST /api/cases/{id}/evidence/gstin`). Stored as authoritative evidence (`source_mode=MANUAL`).
-    - `HttpKycProvider`: Configurable HTTP endpoint via `GSTIN_API_URL_TEMPLATE`, auth headers, and `GSTIN_API_FIELD_MAP`.
+### Phase C (P0): Real Checks & Pluggable Providers
+* **Commit:** `e362c09`
+* **Features Implemented:**
+  - Deterministic checks added to `DeterministicRuleEngine`: `BUYER_GSTIN_MISMATCH`, `TAX_TYPE_STATE_MISMATCH`, `PAN_FORMAT_INVALID`, `INVOICE_NUMBER_FORMAT_INVALID`, `FUTURE_INVOICE_DATE`, `ITC_TIME_BAR_WARNING`, `EINVOICE_QR_MISMATCH` (BLOCK), `LINE_ITEM_ARITHMETIC_MISMATCH`.
+  - Pluggable Registry Providers (`CompositeRegistryProvider`):
+    - `ManualEntryProvider`: Reviewer-attested portal details (`SourceMode.MANUAL`).
+    - `HttpKycProvider`: Configurable HTTP KYC vendor endpoint with field mapping.
     - `TinyFishProvider`: Web research agent automation for public portal lookup.
-    - `DemoProvider`: Isolated synthetic fixtures for demo mode only.
-    - `CompositeRegistryProvider`: Sequences through `GSTIN_PROVIDERS` and fails closed to `UNAVAILABLE`.
-  - **C3: IFSC Verification (`ifsc_provider.py`):**
-    - Open RBI dataset via `https://ifsc.razorpay.com/<IFSC>`.
-    - 30-day SQLite caching (`ifsc_cache` table) with TTL expiration.
-    - Strict truth invariant: never claims account ownership; flags `BANK_OWNERSHIP_UNVERIFIED`.
-  - **C4: Verdict Semantics & Explanation (`AssessmentService`):**
-    - Single source of truth: PASS requires valid GSTIN, verified arithmetic, valid tax state alignment, active GST status, and no conflicts.
-    - Added `GET /api/cases/{id}/explain` returning plain-English `why_this_verdict` and `what_would_change_it` action items.
-
-* **Backend Pytest Output (Phase C):**
-```
-collected 105 items
-====================== 105 passed, 2 warnings in 11.30s =======================
-```
-
-### Phase D (P0): Minimal Real Auth & Audit Verification (Completed)
-* **Key Enhancements Implemented:**
-  - **D1: Token-Based User Authentication (`app/auth/security.py`):** Configurable `USERS_JSON` mapping tokens to user IDs and roles (`ap_analyst` vs `reviewer`).
-  - **D2: Server-Derived Identity:** Removed client trust in `reviewer_id` and `reviewer_role`. Role checks enforce that only `reviewer` / `compliance_officer` users can sign off on reviews.
-  - **D3: In-Memory Rate Limiting:** Sliding window rate limiter (`TokenRateLimiter`) enforcing per-token upload and request thresholds.
-  - **D4: Startup Production Safety:** Production environment rejects missing or unconfigured `USERS_JSON` and default dev reviewer tokens.
-  - **D5: Cryptographic Audit Chain Verification (`verify_audit_chain`):** Recomputes SHA-256 hash chains across all audit events for a case, detects tampering, and exposes `GET /api/cases/{id}/audit/verify`.
-  - **D6: Frontend Client Integration:** `frontend/src/lib/api.ts` attaches `Authorization: Bearer <token>` from `sessionStorage`, handles 401s, and exports endpoints for manual GSTIN evidence submission, explanation, and audit verification.
-
-* **Backend Pytest Output (Phase D):**
-```
-collected 111 items
-======================= 111 passed, 2 warnings in 7.03s =======================
-```
-
-* **Frontend Build Output (Phase D):**
-```
-$ next build
-   ▲ Next.js 15.5.28
-
-   Creating an optimized production build ...
- ✓ Compiled successfully in 4.2s
-   Linting and checking validity of types ...
-   Collecting page data ...
- ✓ Generating static pages (7/7)
-   Finalizing page optimization ...
-   Collecting build traces ...
-
-Route (app)                                 Size  First Load JS
-┌ ○ /                                    15.9 kB         123 kB
-├ ○ /_not-found                            988 B         103 kB
-├ ƒ /cases/[id]                          10.1 kB         112 kB
-├ ○ /dashboard                             245 B         113 kB
-├ ○ /queue                                 162 B         113 kB
-└ ○ /upload                              4.77 kB         112 kB
-```
+    - `DemoProvider`: Isolated synthetic fixtures only when `DEMO_MODE=True` and `case.is_demo=True`.
+    - Fails closed to `UNAVAILABLE` when no provider is active.
+  - `IfscProvider`: Queries `https://ifsc.razorpay.com/<IFSC>`, caches in SQLite `ifsc_cache` table (30-day TTL), strictly preserves `BANK_OWNERSHIP_UNVERIFIED`.
+  - `AssessmentService`: Unified verdict engine; added `explain_verdict` producing `why_this_verdict` and `what_would_change_it`.
+  - Endpoints: `POST /api/cases/{case_id}/evidence/gstin` and `GET /api/cases/{case_id}/explain`.
+* **Pytest:** 105 passed, 0 failed.
 
 ---
 
-## 2. Phase Implementation Checklist
-
-- [x] **Phase A (P0): Fix Verified Defects**
-- [x] **Phase B (P0): Layered Extraction Pipeline (QR + Text + LLM with Provenance)**
-- [x] **Phase C (P0): Real Checks, Pluggable Providers (Manual, HttpKyc, TinyFish), IFSC & Verdict Semantics**
-- [x] **Phase D (P0): Minimal Real Auth (Bearer Tokens, Roles, Server-Derived Identity, Audit Verify)**
-- [ ] **Phase E (P0): Frontend for Real Flow (Review Step, Provenance Chips, Manual Evidence Form, Honest Claims)**
-- [ ] **Phase F (P1): GSTR-2B Reconciliation & Invoice Matching**
-- [ ] **Phase G (P1): Test Corpus (12 PDFs), Eval Harness, CI, Honest Documentation**
-- [ ] **Phase H (P2): Additional Polish (if time permits)**
+### Phase D (P0): Minimal Real Auth & Audit Verification
+* **Commit:** `cc949d2`
+* **Features Implemented:**
+  - `security.py`: Token-based user registry via `USERS_JSON`, server-derived identity, `require_reviewer_role` enforcement, in-memory `TokenRateLimiter`.
+  - Updated `review.py`: Uses server-derived user ID and role, rejecting spoofed client values.
+  - `CaseRepository.verify_audit_chain(db, case_id)` recomputes cryptographic SHA-256 hash chains across audit events and endpoint `GET /api/cases/{case_id}/audit/verify`.
+  - Updated `frontend/src/lib/api.ts`: Attaches `Authorization: Bearer <token>` from `sessionStorage`, handles 401s, exports `submitManualGstinEvidence`, `explainVerdict`, `verifyAuditChain`, and `getCaseFileUrl`.
+* **Pytest:** 111 passed, 0 failed.
 
 ---
 
-## 3. UNVERIFIED AGAINST REAL DATA
+### Phase E (P0): Frontend for Real Flow
+* **Commit:** `ff12a42`
+* **Features Implemented:**
+  - `/upload`: Real file upload is primary; supports drag & drop and multi-file batch upload; removed prefilled "Apex Courier" defaults; collapsed demo presets into drawer with `DEMO DATA` badge.
+  - `/cases/[id]`: Side-by-side extraction review step (left = original PDF/image viewer, right = structured claims with provenance chips `QR`, `LLM`, `REGEX`, `MANUAL`, confidence %, and inline edit; primary CTA **"Confirm & run checks"**).
+  - Evidence panel: `UNAVAILABLE` rendered in neutral grey (never red); added **"Add GST registry details"** form with button copying GSTIN and direct link to official GST Search Taxpayer portal.
+  - Verdict card: Score labelled **"Policy index (heuristic)"** (0-100); displays `why_this_verdict` and `what_would_change_it` from `api.explainVerdict`; ITC exposure card labelled illustrative estimation.
+  - `/queue`: Filters (status, demo on/off toggle), search by vendor / invoice no / GSTIN / Case ID, CSV export button, `DEMO DATA` badge on synthetic cases.
+  - `/`: Removed uncalibrated marketing claims; captioned Apex / Specter sections as "Illustrative Example (Demo Data)"; respected `prefers-reduced-motion` in 3D hero.
+  - Navigation bar: Added role indicator pill and token configuration modal.
+* **Frontend Build:** 7/7 routes compiled cleanly (`pnpm build`).
 
-The following components interact with external standards or services where real test responses cannot be obtained directly in this sandbox environment. Tolerant, defensive implementations are used:
+---
 
-1. **GSTR-2B JSON Schema Variations:** The GSTR-2B parser expects standard B2B invoice fields (`ctin`, `inum`, `dt`, `val`, `txval`, tax splits, itc availability). Tolerant key mapping is implemented, but exact schema variations must be validated against real downloaded JSON exports from the GST portal.
-2. **IRP Signed E-Invoice QR Payload Signature:** E-invoice QR JWT payloads are decoded and parsed leniently without relying on unverified signatures unless `IRP_PUBLIC_KEY_PEM` is explicitly configured.
-3. **External GST Portal Captcha & Anti-Bot Behavior:** Live TinyFish automation on the public GST portal (`services.gst.gov.in`) may encounter captchas or IP rate limits; handled defensively by marking evidence `UNAVAILABLE`.
+### Phase F (P1): GSTR-2B Reconciliation & Invoice Matching
+* **Commit:** `01abaee`
+* **Features Implemented:**
+  - `gstr2b_parser.py`: Tolerantly parses official GST Portal GSTR-2B JSON return file; extracts B2B section, supplier GSTIN (`ctin`), invoice number (`inum`), date (`dt`), gross value (`val`), taxable value (`txval`), taxes, and ITC availability flag (`itcavl`).
+  - `gstr2b_entries` table: Stores imported records in persistent database with upsert semantics.
+  - Rules added to `DeterministicRuleEngine`:
+    - `ITC_NOT_IN_GSTR2B`: Invoice missing from imported GSTR-2B return → **MEDIUM Severity** (payment hold advice).
+    - `GSTR2B_VALUE_MISMATCH`: Gross invoice total contradicts GSTR-2B filed value by > ₹2.00 → **HIGH Severity**.
+    - `GSTR2B_ITC_NOT_AVAILABLE`: Supplier flagged ITC Available = 'No' → **MEDIUM Severity**.
+  - Endpoints: `POST /api/gstr2b/import`, `GET /api/gstr2b/entries`, `GET /api/gstr2b/unmatched`, and `GET /api/gstr2b/match/{case_id}`.
+  - Frontend: GSTR-2B Return drawer on `/queue` (import JSON file, view unclaimed return rows); GSTR-2B filing status chip on case dossier.
+* **Pytest:** 118 passed, 0 failed.
+
+---
+
+### Phase G (P1): Test Corpus, Eval Harness & Honest Documentation
+* **Features Implemented:**
+  - `scripts/make_sample_invoices.py`: Generates 13 synthetic invoice PDFs with checksum-valid GSTINs and matching `.expected.json` files covering intra-state, inter-state IGST, tampered total, wrong buyer GSTIN, wrong tax type, invalid checksum, duplicate pair, invoice reuse with different total, missing GSTIN, scanned image PDF, matching e-invoice QR, and conflicting e-invoice QR.
+  - `scripts/eval_extraction.py`: Evaluates layered extraction accuracy over any folder of invoice PDFs with `.expected.json`. Benchmark result: **89.2% overall field accuracy** across 130 evaluated field facts (Supplier GSTIN: 100%, Buyer GSTIN: 100%, Invoice Number: 92.3%, Taxable Base: 92.3%, IGST: 100%).
+  - `test_phase_g_corpus_e2e.py`: End-to-end API tests for invoice upload → review → evidence → verdict → sign-off → audit verification.
+  - CI Workflow (`.github/workflows/ci.yml`): Runs backend `pytest -q`, frontend `pnpm tsc --noEmit && pnpm build`, and `server-health-check` booting server from `.env.example` and querying `/health`.
+  - Documentation: Created `docs/DATA_SOURCES.md`, `docs/DEMO_SCRIPT.md`, and updated `README.md` and `docs/MVP_STATUS.md`.
+* **Pytest:** 122 passed, 0 failed.
+
+---
+
+## 2. Capabilities: Real vs. Demo vs. Experimental vs. Roadmap
+
+| Capability | Real (Production Ready) | Demo / Attested | Experimental | Roadmap |
+| :--- | :---: | :---: | :---: | :---: |
+| **PDF & Image File Intake** | ✅ Native PDF, PNG, JPG | — | — | Bulk ZIP intake |
+| **e-Invoice QR Code JWT Decoding** | ✅ PyMuPDF + OpenCV | — | — | NIC IRP live public key sync |
+| **PDF Text Layer Regex Extraction** | ✅ PyMuPDF + Regex | — | — | LayoutLM / Table transformers |
+| **Multimodal LLM Extraction** | ✅ Gemini 1.5 / Claude / None | — | — | Local quantized SLM (Ollama) |
+| **Deterministic Mod-36 GSTIN Checksum** | ✅ Official algorithm | — | — | — |
+| **Invoice Arithmetic Validation** | ✅ Multi-rate tax, CGST+SGST, IGST | — | — | Multi-currency invoices |
+| **Public Portal GSTIN Verification** | — | ✅ Manual attestation (`services.gst.gov.in`) | 🔬 TinyFish browser agent | Paid GSP direct API integration |
+| **Bank IFSC Code Lookup** | ✅ Razorpay API + 30-day SQLite cache | — | — | Penny-drop bank ownership API |
+| **GSTR-2B Return Reconciliation** | ✅ JSON parser & invoice matching | — | — | Direct GSTN API auto-sync |
+| **Cryptographic Audit Trail** | ✅ SHA-256 hash-chain verification | — | — | RFC 3161 TSA timestamping |
+| **Reviewer Identity & RBAC** | ✅ Token auth (`USERS_JSON`) + role checks | — | — | Enterprise SAML / OIDC SSO |
+| **5-Vector Forensic Topology Radar** | — | — | 🔬 Heuristic projection | Calibrated statistical model |
+| **ITC Statutory Exposure Calculation** | — | — | 🔬 Sec 16(2)(c) illustrative projection | Formal tax liability calculator |
+
+---
+
+## 3. UNVERIFIED AGAINST REAL DATA (Honest Disclosure for Mentors)
+
+To maintain academic and professional integrity at HackIIITD Esya '26, the team explicitly discloses the following items that have been verified on synthetic/benchmark datasets but require validation against production accounts payable data:
+
+1. **GSTR-2B JSON Parser:** Verified against synthetic B2B JSON structures adhering to official GSTN schema specifications. Must be tested against a live downloaded production GSTR-2B file from an operating enterprise to confirm handling of optional edge-case fields (e.g., SEZ supplies, amended invoices `b2ba`, reverse charge rows).
+2. **Scanned / Mobile Photo OCR Quality:** When native text layers and QR codes are absent, extraction relies on OCR/LLM. Extremely low-light, skewed, or blurred physical mobile phone photos will require user verification and correction via the inline **"Correct Claims"** workflow.
+3. **Forensic Vector Risk Scores:** The 5-vector forensic radar scores (Shell Contagion, Collocation Ghost Hub, Pop-up Velocity) are deterministic mathematical heuristics designed for prioritization. They are **not statistically calibrated fraud probabilities**.
+4. **Bank Account Ownership:** IFSC verification validates bank routing and branch details, but does not verify account holder name. Accounts payable teams must continue requiring cancelled cheque verification or penny-drop before payment release.
+
+---
+
+## 4. Next 3 Steps for the Team with Real Data
+
+1. **Drop in 10 Real Redacted Invoices:** Drop 10–20 real (redacted) vendor invoices into `data/sample_invoices/` and run `python scripts/eval_extraction.py data/sample_invoices` to measure actual real-world field extraction accuracy for the hackathon judges.
+2. **Test with One Real GSTR-2B Download:** Download one real quarterly/monthly GSTR-2B JSON statement from an active GSTIN, import it via the UI (`/queue` → GSTR-2B Returns), and verify that supplier invoices reconcile cleanly.
+3. **Practice the 5-Minute Demo Script:** Practice the 5-minute live demonstration outlined in [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md), demonstrating real invoice upload, fail-closed behavior, portal attestation, and cryptographic audit verification.

@@ -1,0 +1,14 @@
+{
+  "filename": "06_invalid_gstin_checksum.pdf",
+  "supplier_name": "Bogus Supply Traders",
+  "gstin": "07AABCB1234F1Z0",
+  "buyer_gstin": "07ABCDE1234F1Z2",
+  "invoice_number": "INV-2026-0006",
+  "invoice_date": "2026-10-20",
+  "total_amount": 11800.0,
+  "taxable_amount": 10000.0,
+  "cgst": 900.0,
+  "sgst": 900.0,
+  "igst": 0.0,
+  "expected_verdict": "BLOCK"
+}

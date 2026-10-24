@@ -1,0 +1,14 @@
+{
+  "filename": "03_tampered_total.pdf",
+  "supplier_name": "Delta Office Systems Pvt Ltd",
+  "gstin": "07AABCB1234F1ZA",
+  "buyer_gstin": "07ABCDE1234F1Z2",
+  "invoice_number": "INV-2026-0003",
+  "invoice_date": "2026-10-17",
+  "total_amount": 150000.0,
+  "taxable_amount": 100000.0,
+  "cgst": 9000.0,
+  "sgst": 9000.0,
+  "igst": 0.0,
+  "expected_verdict": "MANUAL_REVIEW"
+}

@@ -1,0 +1,14 @@
+{
+  "filename": "11_scanned_image_invoice.pdf",
+  "supplier_name": "Sunrise Hardware Stores",
+  "gstin": "07AABCB1234F1ZA",
+  "buyer_gstin": "07ABCDE1234F1Z2",
+  "invoice_number": "INV-2026-0011",
+  "invoice_date": "2026-10-23",
+  "total_amount": 35400.0,
+  "taxable_amount": 30000.0,
+  "cgst": 2700.0,
+  "sgst": 2700.0,
+  "igst": 0.0,
+  "expected_verdict": "MANUAL_REVIEW"
+}

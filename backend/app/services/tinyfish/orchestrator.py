@@ -513,9 +513,335 @@ class MultiHopTinyFishOrchestrator:
         clean_gstin = gstin.strip().upper() if gstin else "07AAAAA0000A1Z5"
 
         # ----------------------------------------------------
+        # SCENARIO: Max Enterprises (Sample Invoice 1 - Hardware & Industrial Supplier)
+        # ----------------------------------------------------
+        if "max" in name_lower or clean_gstin.startswith("29AAACP7879D1Z") or "ace electronics" in name_lower:
+            ev1 = EvidenceItem(
+                evidence_id="ev_hop1_gst_demo",
+                source_url="demo://knowyourgst.com/29AAACP7879D1Z0",
+                source_name="GST Filing Velocity & Legal Status [Hop 1: DEMO FIXTURE]",
+                claim_supported="Legal Entity Registration & Filing Velocity",
+                source_type="GOVERNMENT_REGISTRY",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    "KNOWYOURGST AUDIT LOG: GSTIN 29AAACP7879D1Z0 registered to 'Max Enterprises'. "
+                    "Trade Name: Max Enterprises. Jurisdiction: Bengaluru South Ward-4. Status: ACTIVE. "
+                    "Date of Registration: 2019-06-18. GSTR-1 and GSTR-3B filings strictly regular. Zero default."
+                ),
+                facts={
+                    "legal_name": "Max Enterprises",
+                    "trade_name": "Max Enterprises",
+                    "gst_status": "ACTIVE",
+                    "registration_date": "2019-06-18",
+                    "gstr3b_status": "FILED_ON_TIME",
+                    "filing_delay_detected": False,
+                    "filing_delay_months": 0,
+                    "cash_tax_ratio": 0.14
+                },
+                is_authoritative=False,
+                hop_number=1,
+                hop_title="GST Filing Velocity & Entity Cross-Check"
+            )
+
+            ev2 = EvidenceItem(
+                evidence_id="ev_hop2_kanoon_demo",
+                source_url="demo://indiankanoon.org/search/?formInput=Max+Enterprises+Bengaluru",
+                source_name="Indian Kanoon NCLT & High Court Radar [Hop 2: DEMO FIXTURE]",
+                claim_supported="Judicial Insolvency & Tax Tribunal Standing",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    "INDIAN KANOON DOCKET: Judicial search for 'Max Enterprises' Bengaluru across High Courts & Tribunals. "
+                    "Clean judicial standing. Zero active NCLT IBC Section 7/9 insolvency proceedings. Zero fake-ITC prosecution orders."
+                ),
+                facts={
+                    "adverse_docket_count": 0,
+                    "top_case_title": "Max Enterprises - Zero Adverse Judicial Records (NCLT Bengaluru)",
+                    "insolvency_or_tax_fraud_flag": False,
+                    "forensic_summary": "Clean judicial record. Zero corporate insolvency proceedings found.",
+                    "source_url": "demo://indiankanoon.org/search/?formInput=Max+Enterprises"
+                },
+                is_authoritative=False,
+                hop_number=2,
+                hop_title="Judicial & NCLT Insolvency Docket Agent"
+            )
+
+            ev3 = EvidenceItem(
+                evidence_id="ev_hop3_dggi_demo",
+                source_url="demo://cbic-gst.gov.in/dggi/search/?q=29AAACP7879D1Z0",
+                source_name="DGGI Enforcement & Debarment Radar [Hop 3: DEMO FIXTURE]",
+                claim_supported="Regulatory Enforcement & Vendor Blacklisting",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    "DGGI REGULATORY SWEEP: Directorate General of GST Intelligence (DGGI) national database sweep for GSTIN 29AAACP7879D1Z0. "
+                    "Zero enforcement raids, show-cause notices, or circulars detected. Public procurement and GeM standing: UNRESTRICTED."
+                ),
+                facts={
+                    "enforcement_hit": False,
+                    "agency_named": "None",
+                    "allegation_summary": "Clean regulatory sweep. Zero adverse enforcement records.",
+                    "risk_severity": "LOW"
+                },
+                is_authoritative=False,
+                hop_number=3,
+                hop_title="DGGI Enforcement & Public Debarment Radar"
+            )
+
+            ev4 = EvidenceItem(
+                evidence_id="ev_hop4_indiamart_demo",
+                source_url="demo://dir.indiamart.com/search.mp?ss=Dell+17+inch+Monitor",
+                source_name="IndiaMART B2B Procurement Benchmark [Hop 4: DEMO FIXTURE]",
+                claim_supported="Procurement Price Fairness & Anti-Kickback",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    "INDIAMART B2B BENCHMARK: Billed Unit Price ₹8,900.00 vs IndiaMART Wholesale Median ₹8,500.00. "
+                    "Normal commercial price variance of +4.7%. Price within standard market tolerance range (₹7,800.00 - ₹9,200.00). "
+                    "Zero inflation or synthetic overbilling anomaly."
+                ),
+                facts={
+                    "market_median_price_inr": 8500.0,
+                    "market_min_price_inr": 7800.0,
+                    "market_max_price_inr": 9200.0,
+                    "sample_listings_count": 8,
+                    "price_inflation_pct": 4.7
+                },
+                is_authoritative=False,
+                hop_number=4,
+                hop_title="Live B2B Procurement Price Benchmark Agent"
+            )
+
+            directors = [
+                DirectorProfile(
+                    din="07119283",
+                    name="Sunil Kumar Mehta (Managing Partner)",
+                    appointment_date="2019-06-18",
+                    associated_companies_count=2,
+                    struck_off_companies_count=0,
+                    contagion_ratio=0.0,
+                    active_insolvency_cases=0,
+                    is_benami_flagged=False
+                )
+            ]
+            address_cluster = AddressClusterProfile(
+                raw_address="261, 6th Cross, Jayanagar, 4th Block, Bengaluru, Karnataka",
+                collocated_gstins_count=1,
+                premises_type="COMMERCIAL_HUB",
+                is_ghost_hub=False,
+                evidence_url="demo://maps.google.com/?q=261+6th+Cross+Jayanagar+Bengaluru"
+            )
+            litigation_meta = {
+                "active_cases": 0,
+                "nclt_petitions": [],
+                "status": "CLEAN",
+                "docket_summary": JudicialDocketSummary(
+                    adverse_docket_count=0,
+                    top_case_title="Max Enterprises - Clean Judicial Standing",
+                    insolvency_or_tax_fraud_flag=False,
+                    forensic_summary="Zero adverse insolvency proceedings or tribunal winding-up petitions.",
+                    source_url="demo://indiankanoon.org/search/?formInput=Max+Enterprises"
+                ),
+                "enforcement_radar": EnforcementRadarSummary(
+                    enforcement_hit=False,
+                    agency_named="None",
+                    allegation_summary="Clean regulatory sweep. Zero adverse enforcement records.",
+                    risk_severity="LOW",
+                    source_url="demo://cbic-gst.gov.in/dggi"
+                ),
+                "procurement_benchmark": ProcurementPriceBenchmark(
+                    item_description="Dell 17 inch Monitor",
+                    billed_unit_price=8900.0,
+                    market_median_price_inr=8500.0,
+                    market_min_price_inr=7800.0,
+                    market_max_price_inr=9200.0,
+                    sample_listings_count=8,
+                    price_inflation_pct=4.7,
+                    is_anomaly=False,
+                    source_url="demo://dir.indiamart.com/search.mp?ss=Dell+17+inch+Monitor"
+                )
+            }
+            return [ev1, ev2, ev3, ev4], directors, address_cluster, litigation_meta
+
+        # ----------------------------------------------------
+        # SCENARIO: Blue Sky India Limited (Sample Invoice 0 - Fraud Shell Anomaly)
+        # ----------------------------------------------------
+        elif "blue" in name_lower or "sky" in name_lower or clean_gstin == "ASDF23486DD":
+            ev1 = EvidenceItem(
+                evidence_id="ev_hop1_gst_demo",
+                source_url="demo://knowyourgst.com/ASDF23486DD",
+                source_name="GST Filing Velocity & Legal Status [Hop 1: DEMO FIXTURE]",
+                claim_supported="Legal Entity Registration & Filing Velocity",
+                source_type="GOVERNMENT_REGISTRY",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    "KNOWYOURGST AUDIT LOG: GSTIN ASDF23486DD is INVALID. Format failure: 11 characters instead of statutory 15. "
+                    "Taxpayer entity non-existent on GST Portal. Zero returns on record. Fraud shell entity signature."
+                ),
+                facts={
+                    "legal_name": "Unregistered / Unknown Entity",
+                    "trade_name": "Blue Sky India Limited",
+                    "gst_status": "CANCELLED_OR_NONEXISTENT",
+                    "registration_date": "N/A",
+                    "gstr3b_status": "DEFAULTER_NOT_FILED",
+                    "filing_delay_detected": True,
+                    "filing_delay_months": 24,
+                    "cash_tax_ratio": 0.0
+                },
+                is_authoritative=False,
+                hop_number=1,
+                hop_title="GST Filing Velocity & Entity Cross-Check"
+            )
+
+            ev2 = EvidenceItem(
+                evidence_id="ev_hop2_kanoon_demo",
+                source_url="demo://indiankanoon.org/search/?formInput=Blue+Sky+India+Limited+Fraud",
+                source_name="Indian Kanoon NCLT & High Court Radar [Hop 2: DEMO FIXTURE]",
+                claim_supported="Judicial Insolvency & Tax Tribunal Standing",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    "INDIAN KANOON DOCKET: Operational Creditor vs Blue Sky India Limited [CP/88/ND/2025 under IBC Section 9]. "
+                    "Severe default. Directors non-responsive to court summons. Winding up petition admitted."
+                ),
+                facts={
+                    "adverse_docket_count": 3,
+                    "top_case_title": "Operational Creditor vs Blue Sky India Limited [CP/88/ND/2025 IBC Sec 9]",
+                    "insolvency_or_tax_fraud_flag": True,
+                    "forensic_summary": "Active NCLT insolvency proceedings admitted under IBC Sec 9.",
+                    "source_url": "demo://indiankanoon.org/search/?formInput=Blue+Sky+India+Limited"
+                },
+                is_authoritative=False,
+                hop_number=2,
+                hop_title="Judicial & NCLT Insolvency Docket Agent"
+            )
+
+            ev3 = EvidenceItem(
+                evidence_id="ev_hop3_dggi_demo",
+                source_url="demo://cbic-gst.gov.in/dggi/search/?q=Blue+Sky+India+Limited",
+                source_name="DGGI Enforcement & Debarment Radar [Hop 3: DEMO FIXTURE]",
+                claim_supported="Regulatory Enforcement & Vendor Blacklisting",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    "DGGI ENFORCEMENT HIT: Directorate General of GST Intelligence (DGGI), Delhi Zonal Unit detected "
+                    "circular trading racket involving bogus entities without genuine underlying supply of goods. "
+                    "Blue Sky India Limited flagged in circular SCN/DGGI/DZU/2025/1104."
+                ),
+                facts={
+                    "enforcement_hit": True,
+                    "agency_named": "DGGI Delhi Zonal Unit",
+                    "allegation_summary": "Flagged in DGGI Show Cause Notice SCN/DGGI/DZU/2025/1104 for circular trading.",
+                    "risk_severity": "CRITICAL"
+                },
+                is_authoritative=False,
+                hop_number=3,
+                hop_title="DGGI Enforcement & Public Debarment Radar"
+            )
+
+            ev4 = EvidenceItem(
+                evidence_id="ev_hop4_indiamart_demo",
+                source_url="demo://dir.indiamart.com/search.mp?ss=Enterprise+Security+Appliance",
+                source_name="IndiaMART B2B Procurement Benchmark [Hop 4: DEMO FIXTURE]",
+                claim_supported="Procurement Price Fairness & Anti-Kickback",
+                source_type="PUBLIC_RECORDS",
+                source_mode=SourceMode.SIMULATED,
+                is_fallback=True,
+                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                retrieved_at=now,
+                raw_excerpt=(
+                    "INDIAMART B2B BENCHMARK: Billed Unit Price ₹42,250.00 vs IndiaMART Wholesale Median ₹14,000.00. "
+                    "Severe 201.8% price inflation detected. Billed price exceeds market ceiling by over 3x. "
+                    "Indicator of synthetic invoice overbilling / kickback scheme."
+                ),
+                facts={
+                    "market_median_price_inr": 14000.0,
+                    "market_min_price_inr": 12000.0,
+                    "market_max_price_inr": 16500.0,
+                    "sample_listings_count": 6,
+                    "price_inflation_pct": 201.8
+                },
+                is_authoritative=False,
+                hop_number=4,
+                hop_title="Live B2B Procurement Price Benchmark Agent"
+            )
+
+            directors = [
+                DirectorProfile(
+                    din="09118471",
+                    name="Vijay Kumar Sharma (Disqualified)",
+                    appointment_date="2023-11-10",
+                    associated_companies_count=18,
+                    struck_off_companies_count=8,
+                    contagion_ratio=0.44,
+                    active_insolvency_cases=3,
+                    is_benami_flagged=True
+                )
+            ]
+            address_cluster = AddressClusterProfile(
+                raw_address="B-126, Rear Side Basement, Malviya Nagar, New Delhi - 110017",
+                collocated_gstins_count=29,
+                premises_type="VIRTUAL_OFFICE",
+                is_ghost_hub=True,
+                evidence_url="demo://maps.google.com/?q=B-126+Rear+Side+Basement+Malviya+Nagar"
+            )
+            litigation_meta = {
+                "active_cases": 2,
+                "nclt_petitions": ["CP/88/ND/2025 under IBC Section 9"],
+                "status": "CRITICAL_ADVERSE",
+                "docket_summary": JudicialDocketSummary(
+                    adverse_docket_count=3,
+                    top_case_title="Operational Creditor vs Blue Sky India Limited [CP/88/ND/2025]",
+                    insolvency_or_tax_fraud_flag=True,
+                    forensic_summary="Active NCLT insolvency proceedings admitted under IBC Sec 9.",
+                    source_url="demo://indiankanoon.org/search/?formInput=Blue+Sky+India+Limited"
+                ),
+                "enforcement_radar": EnforcementRadarSummary(
+                    enforcement_hit=True,
+                    agency_named="DGGI Delhi Zonal Unit",
+                    allegation_summary="Flagged in DGGI Show Cause Notice SCN/DGGI/DZU/2025/1104 for circular trading.",
+                    risk_severity="CRITICAL",
+                    source_url="demo://cbic-gst.gov.in/dggi"
+                ),
+                "procurement_benchmark": ProcurementPriceBenchmark(
+                    item_description="Enterprise Security Appliance & Industrial Routers",
+                    billed_unit_price=42250.0,
+                    market_median_price_inr=14000.0,
+                    market_min_price_inr=12000.0,
+                    market_max_price_inr=16500.0,
+                    sample_listings_count=6,
+                    price_inflation_pct=201.8,
+                    is_anomaly=True,
+                    source_url="demo://dir.indiamart.com/search.mp?ss=Enterprise+Security+Appliance"
+                )
+            }
+            return [ev1, ev2, ev3, ev4], directors, address_cluster, litigation_meta
+
+        # ----------------------------------------------------
         # SCENARIO A: Specter Cloud Technologies (Malicious Ghost Shell)
         # ----------------------------------------------------
-        if "specter" in name_lower or "ghost" in name_lower or clean_gstin == "27AABCS1429B1Z1":
+        elif "specter" in name_lower or "ghost" in name_lower or clean_gstin == "27AABCS1429B1Z1":
             if clean_gstin == "07AAAAA0000A1Z5":
                 ev1_legal = "Apex Global Logistics Private Limited"
                 ev1_trade = "Apex Courier"

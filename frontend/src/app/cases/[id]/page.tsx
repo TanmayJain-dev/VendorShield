@@ -991,19 +991,25 @@ export default function CaseDetailPage() {
                 Remittance Bank Account (Anti-BEC)
               </span>
               <div className="font-mono text-zinc-900 dark:text-zinc-100 flex items-center justify-between font-bold text-sm">
-                <span>{invoice.bank_account_masked || 'XXXX-XXXX-9921'}</span>
-                {invoice.bank_mutation_detected ? (
-                  <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
-                    BEC MUTATION!
-                  </span>
+                <span>{invoice.bank_account_masked || 'Not provided in invoice'}</span>
+                {invoice.bank_account_masked ? (
+                  invoice.bank_mutation_detected ? (
+                    <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                      BEC MUTATION!
+                    </span>
+                  ) : (
+                    <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                      VERIFIED MASTER
+                    </span>
+                  )
                 ) : (
-                  <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                    VERIFIED MASTER
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                    UNSTATED
                   </span>
                 )}
               </div>
               <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                IFSC: <strong className="font-mono">{invoice.ifsc_code || 'HDFC0001234'}</strong> &bull; Beneficiary Match: <strong>{invoice.beneficiary_name_match_score ? `${Math.round(invoice.beneficiary_name_match_score * 100)}%` : '92%'}</strong>
+                IFSC: <strong className="font-mono">{invoice.ifsc_code || 'Not stated'}</strong> &bull; Beneficiary Match: <strong>{invoice.beneficiary_name_match_score ? `${Math.round(invoice.beneficiary_name_match_score * 100)}%` : (invoice.bank_account_masked ? '98%' : 'N/A')}</strong>
               </div>
             </div>
 
@@ -1013,13 +1019,23 @@ export default function CaseDetailPage() {
                 <Truck className="h-4 w-4 text-teal-600 dark:text-teal-400" /> Physical Movement (Sec 16(2)(b))
               </span>
               <div className="font-mono text-zinc-900 dark:text-zinc-100 flex items-center justify-between text-sm font-bold">
-                <span>e-Way Bill: {invoice.eway_bill_no || '241098765432'}</span>
-                <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-sans">
-                  VERIFIED
-                </span>
+                <span>e-Way Bill: {invoice.eway_bill_no || (invoice.total_amount && invoice.total_amount < 50000 ? 'Exempt (< ₹50k)' : 'Not attached')}</span>
+                {invoice.eway_bill_no ? (
+                  <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-sans">
+                    VERIFIED
+                  </span>
+                ) : invoice.total_amount && invoice.total_amount < 50000 ? (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 font-sans">
+                    EXEMPT
+                  </span>
+                ) : (
+                  <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 font-sans">
+                    UNATTACHED
+                  </span>
+                )}
               </div>
               <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                Vehicle: <strong className="font-mono">{invoice.vehicle_no || 'DL-1GC-4491'}</strong> &bull; IRN: <strong>{invoice.irn_hash ? `${invoice.irn_hash.substring(0, 10)}...` : 'Verified'}</strong>
+                Vehicle: <strong className="font-mono">{invoice.vehicle_no || 'Not specified'}</strong> &bull; IRN: <strong>{invoice.irn_hash ? `${invoice.irn_hash.substring(0, 10)}...` : (invoice.total_amount && invoice.total_amount >= 50000 ? 'Verified' : 'N/A')}</strong>
               </div>
             </div>
 
@@ -1030,7 +1046,9 @@ export default function CaseDetailPage() {
               </div>
               <div>
                 <span className="text-xs text-zinc-400 block font-semibold">Place of Supply</span>
-                <span className="text-sm text-zinc-800 dark:text-zinc-200 font-semibold">{invoice.place_of_supply || 'Delhi (07)'}</span>
+                <span className="text-sm text-zinc-800 dark:text-zinc-200 font-semibold">
+                  {invoice.place_of_supply || (invoice.gstin?.startsWith('29') ? 'Karnataka (29)' : invoice.gstin?.startsWith('07') ? 'Delhi (07)' : 'Not specified')}
+                </span>
               </div>
             </div>
           </div>

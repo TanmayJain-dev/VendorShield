@@ -115,6 +115,7 @@ def _group_rapidocr_boxes(result) -> Tuple[str, float]:
         y_center = sum(ys) / len(ys) if ys else 0
         h = max(ys) - min(ys) if ys else 10
         x_min = min(xs) if xs else 0
+        x_max = max(xs) if xs else 0
 
         valid_items.append({
             "box": box,
@@ -122,7 +123,8 @@ def _group_rapidocr_boxes(result) -> Tuple[str, float]:
             "score": score,
             "y": y_center,
             "h": max(h, 1.0),
-            "x": x_min
+            "x": x_min,
+            "x_max": x_max
         })
 
     if not valid_items:
@@ -148,18 +150,35 @@ def _group_rapidocr_boxes(result) -> Tuple[str, float]:
     # Sort lines vertically from top to bottom
     lines.sort(key=lambda line: sum(it["y"] for it in line) / len(line))
 
-    # For each line, sort boxes left to right and join with single space
+    # For each line, sort boxes left to right.
+    # If a horizontal gap between adjacent boxes exceeds 35px, treat as a multi-column
+    # boundary and emit separate sublines to avoid smashing distinct fields together.
     formatted_lines: List[str] = []
     for line in lines:
         line.sort(key=lambda it: it["x"])
-        # Join adjacent boxes on the same line with a single space ' ', NEVER ''
-        line_str = " ".join(it["text"] for it in line if it["text"])
-        line_str = re.sub(r"\s+", " ", line_str).strip()
-        if line_str:
-            formatted_lines.append(line_str)
+        sublines: List[str] = []
+        curr_tokens: List[str] = []
+        for idx, it in enumerate(line):
+            if idx > 0:
+                prev_it = line[idx - 1]
+                gap = it["x"] - prev_it["x_max"]
+                if gap > 35:
+                    if curr_tokens:
+                        sublines.append(" ".join(curr_tokens))
+                        curr_tokens = []
+            curr_tokens.append(it["text"])
+        if curr_tokens:
+            sublines.append(" ".join(curr_tokens))
+        for s in sublines:
+            s_clean = re.sub(r"\s+", " ", s).strip()
+            if s_clean:
+                formatted_lines.append(s_clean)
 
     avg_score = sum(scores) / len(scores) if scores else 0.88
-    return "\n".join(formatted_lines).strip(), avg_score
+    res_text = "\n".join(formatted_lines).strip()
+    # Normalize full-width unicode colons and common OCR currency glyph misreads
+    res_text = res_text.replace("\uff1a", ":").replace("天", "₹ ").replace("\u5929", "₹ ")
+    return res_text, avg_score
 
 
 def _try_rapidocr(image_bytes: bytes) -> Optional[Tuple[str, float]]:

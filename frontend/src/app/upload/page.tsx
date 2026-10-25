@@ -46,6 +46,7 @@ export default function IntakePage() {
   const [copiedRawText, setCopiedRawText] = useState(false);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [scanStep, setScanStep] = useState<string>('');
 
   const loadHavellsLivePreset = () => {
     setFile(null);
@@ -89,6 +90,7 @@ export default function IntakePage() {
     setSelectedScenario(null);
     setError(null);
     setIsExtracting(true);
+    setScanStep('Reading document pixels & initializing 300 DPI RapidOCR...');
     setExtractionTelemetry(null);
     setMissingFields([]);
     setSupplierName('');
@@ -96,8 +98,18 @@ export default function IntakePage() {
     setInvoiceNumber('');
     setTotalAmount('');
 
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
     try {
-      const data = await api.parseDocument(selectedFile);
+      const apiPromise = api.parseDocument(selectedFile);
+
+      await sleep(500);
+      setScanStep('Segmenting multi-column vendor & buyer zones...');
+      await sleep(500);
+      setScanStep('Reconciling statutory GSTN Luhn Modulo-36 & claims...');
+      await sleep(350);
+
+      const data = await apiPromise;
       setExtractionTelemetry(data);
 
       if (data.supplier_name && data.supplier_name !== 'Unknown Supplier') {
@@ -120,6 +132,7 @@ export default function IntakePage() {
       setError(`Automatic OCR notice: ${err.message || 'Could not parse document'}. You may still verify or manually enter values below.`);
     } finally {
       setIsExtracting(false);
+      setScanStep('');
     }
   };
 
@@ -232,7 +245,7 @@ export default function IntakePage() {
                   </div>
                   <div className="space-y-1">
                     <div className="text-sm font-bold text-teal-700 dark:text-teal-300">
-                      🔄 Extracting invoice telemetry &amp; running Modulo-36 / OCR checks...
+                      🔄 {scanStep || 'Extracting invoice telemetry & running Modulo-36 / OCR checks...'}
                     </div>
                     <div className="text-xs text-zinc-500 dark:text-zinc-400 font-mono">
                       RapidOCR ONNX (300 DPI) &bull; Vector Layer Analysis

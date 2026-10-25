@@ -28,6 +28,9 @@ class InvoiceClaim(BaseModel):
     supplier_name: str  # Trade name as written on invoice
     legal_name: Optional[str] = None
     gstin: Optional[str] = None
+    buyer_name: Optional[str] = None
+    buyer_gstin: Optional[str] = None
+    forensic_anomaly: Optional[str] = None
     billing_address: Optional[str] = None
     place_of_supply: Optional[str] = None
     discount_amount: float = 0.0
@@ -113,11 +116,14 @@ class DocumentParseResponse(BaseModel):
     gstin: Optional[str] = None
     gstin_format_valid: Optional[bool] = None
     gstin_checksum_message: Optional[str] = None
+    buyer_name: Optional[str] = None
+    buyer_gstin: Optional[str] = None
+    forensic_anomaly: Optional[str] = None
     invoice_number: str
     invoice_date: Optional[str] = None
-    total_amount: float = 0.0
-    base_amount: float = 0.0
-    gst_amount: float = 0.0
+    total_amount: Optional[float] = None
+    base_amount: Optional[float] = None
+    gst_amount: Optional[float] = None
     detected_tax_rate: Optional[float] = None
     line_items: List[LineItem] = Field(default_factory=list)
     bank_account_masked: Optional[str] = None

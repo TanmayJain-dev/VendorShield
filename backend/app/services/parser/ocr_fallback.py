@@ -1,4 +1,5 @@
 import io
+import re
 import logging
 from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass, field
@@ -41,19 +42,137 @@ def is_page_likely_scanned(page, char_threshold: int = 40) -> bool:
         return False
 
 
+# Corporate name tokens for word segmentation & normalization
+CORPORATE_TOKENS = [
+    "INDIA", "LIMITED", "PRIVATE", "PVT", "LTD", "LLP",
+    "ENTERPRISES", "CORPORATION", "INDUSTRIES", "SOLUTIONS",
+    "TECHNOLOGIES", "SERVICES", "LOGISTICS", "ELECTRICALS",
+    "GLOBAL", "TRADERS", "CO", "COMPANY", "SKY", "BLUE",
+    "TECH", "GURU", "PLUS"
+]
+
+
+def normalize_corporate_name(name: Optional[str]) -> str:
+    """
+    Corporate Name Space Normalizer:
+    1. Splits camelCase tokens (e.g. 'BlueSky' -> 'Blue Sky').
+    2. Inserts spaces before/after known Indian corporate/entity tokens and English words
+       when concatenated in all-caps (e.g. 'BLUESKYINDIALIMITED' -> 'BLUE SKY INDIA LIMITED').
+    3. Collapses multiple spaces into a single space and strips.
+    """
+    if not name:
+        return ""
+    res = str(name).strip()
+
+    # 1. camelCase splitting (e.g. 'BlueSky' -> 'Blue Sky')
+    res = re.sub(r"([a-z])([A-Z])", r"\1 \2", res)
+
+    # 2. Concatenated all-caps entity tokens
+    # Sort tokens descending by length so longer words (e.g. CORPORATION) match before shorter (CO)
+    sorted_tokens = sorted(CORPORATE_TOKENS, key=len, reverse=True)
+    for _ in range(2):
+        for token in sorted_tokens:
+            token_upper = token.upper()
+            if token_upper == "CO":
+                # 'CO' is usually a suffix in concatenated all-caps (e.g. 'TRADINGCO' -> 'TRADING CO')
+                # Avoid prefix splitting to avoid breaking words like 'COMMERCIAL' or 'COURIER'
+                res = re.sub(r"([A-Z])(CO)\b", r"\1 \2", res)
+                continue
+
+            # Token at end of an all-caps cluster (e.g. 'SKYINDIA' -> 'SKY INDIA')
+            res = re.sub(rf"([A-Z])({token_upper})\b", r"\1 \2", res)
+            # Token at beginning of an all-caps cluster (e.g. 'BLUESKY' -> 'BLUE SKY')
+            res = re.sub(rf"\b({token_upper})([A-Z])", r"\1 \2", res)
+            # Token inside an all-caps cluster (e.g. 'BLUESKYINDIA' -> 'BLUE SKY INDIA')
+            res = re.sub(rf"([A-Z])({token_upper})([A-Z])", r"\1 \2 \3", res)
+
+    # 3. Collapse multiple spaces into a single space
+    return re.sub(r"\s+", " ", res).strip()
+
+
+
+def _group_rapidocr_boxes(result) -> Tuple[str, float]:
+    """
+    Groups RapidOCR bounding boxes into horizontal lines preserving left-to-right order.
+    Adjacent boxes on the same line are joined with a single space ' ', never ''.
+    """
+    if not result:
+        return "", 0.0
+
+    valid_items: List[Dict[str, Any]] = []
+    scores: List[float] = []
+
+    for item in result:
+        if not item or len(item) < 2 or not item[1] or not str(item[1]).strip():
+            continue
+        box = item[0]
+        text = str(item[1]).strip()
+        score = float(item[2]) if len(item) > 2 else 0.88
+        scores.append(score)
+
+        ys = [p[1] for p in box] if hasattr(box, "__iter__") else [0, 0]
+        xs = [p[0] for p in box] if hasattr(box, "__iter__") else [0, 0]
+        y_center = sum(ys) / len(ys) if ys else 0
+        h = max(ys) - min(ys) if ys else 10
+        x_min = min(xs) if xs else 0
+
+        valid_items.append({
+            "box": box,
+            "text": text,
+            "score": score,
+            "y": y_center,
+            "h": max(h, 1.0),
+            "x": x_min
+        })
+
+    if not valid_items:
+        return "", 0.0
+
+    # Sort vertically first
+    valid_items.sort(key=lambda item: item["y"])
+
+    # Cluster into lines based on vertical proximity and height overlap
+    lines: List[List[Dict[str, Any]]] = []
+    for item in valid_items:
+        placed = False
+        for line in lines:
+            line_y = sum(it["y"] for it in line) / len(line)
+            line_h = sum(it["h"] for it in line) / len(line)
+            if abs(item["y"] - line_y) < max(item["h"], line_h) * 0.5:
+                line.append(item)
+                placed = True
+                break
+        if not placed:
+            lines.append([item])
+
+    # Sort lines vertically from top to bottom
+    lines.sort(key=lambda line: sum(it["y"] for it in line) / len(line))
+
+    # For each line, sort boxes left to right and join with single space
+    formatted_lines: List[str] = []
+    for line in lines:
+        line.sort(key=lambda it: it["x"])
+        # Join adjacent boxes on the same line with a single space ' ', NEVER ''
+        line_str = " ".join(it["text"] for it in line if it["text"])
+        line_str = re.sub(r"\s+", " ", line_str).strip()
+        if line_str:
+            formatted_lines.append(line_str)
+
+    avg_score = sum(scores) / len(scores) if scores else 0.88
+    return "\n".join(formatted_lines).strip(), avg_score
+
+
 def _try_rapidocr(image_bytes: bytes) -> Optional[Tuple[str, float]]:
     """
     Attempts OCR using RapidOCR (ONNX Runtime CPU engine - high accuracy, zero external C++ binary dependency).
+    Preserves horizontal bounding-box spacing and line grouping.
     """
     try:
         from rapidocr_onnxruntime import RapidOCR
         engine = RapidOCR()
         result, _ = engine(image_bytes)
         if result:
-            lines = [line[1].strip() for line in result if line and len(line) > 1 and line[1]]
-            scores = [float(line[2]) for line in result if line and len(line) > 2]
-            avg_score = sum(scores) / len(scores) if scores else 0.88
-            text = "\n".join(lines).strip()
+            text, avg_score = _group_rapidocr_boxes(result)
             if text:
                 return text, avg_score
     except Exception as e:

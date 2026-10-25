@@ -143,3 +143,75 @@ def test_create_case_and_investigate_from_image_upload():
     assert investigated_case["status"] == "READY_FOR_REVIEW"
     assert investigated_case["assessment"] is not None
     assert len(investigated_case["evidence_items"]) >= 1
+
+
+def test_sample_invoice_blank_amounts_and_malformed_supplier_gstin():
+    """Verify that sample invoice.jpg with blank amounts and malformed supplier GSTIN
+
+    is correctly parsed without hallucinating amounts, accurately segmenting supplier name,
+    detecting malformed supplier GSTIN vs buyer GSTIN, and marking amounts as None.
+    """
+    from backend.app.services.parser.invoice_parser import (
+        parse_invoice_text,
+        build_document_parse_response,
+    )
+
+    sample_ocr_text = """Tax Invoice
+BLUE SKYINDIA LIMITED
+GSTNO.ASDF23486DD
+B-126, Rear Side Basement Malviya Nagar New Delhi-110017
+e-mail:info@gmail.com,Ph.011-3483465734,123323487348
+State Name : Delhi, State Code : DL
+Client Name : TECHGURUPLUS Date 25-10-2017
+Address H-195, Sarita Vihar, New Delhi 110076 Invoice No : 76/2017-18
+GSTIN 07PDUJS4678K1Z4
+Delivery Address: State Name: Delhi
+Client Name : TECHGURUPLUS
+Address H-195, Sarita Vihar, New Delhi 110076 State Code: DL
+GSTIN 07PDUJS4678K1Z4
+Description S.No Qty Rate HSNCode Amount
+Total Value
+Add : CGST 14%
+Add : SGST 14%
+Grand Total
+Amount in Words:
+For BLUE SKY INDIA LIMITED
+Authorised Signature"""
+
+    claim = parse_invoice_text(sample_ocr_text)
+
+    # 1. Supplier Name word segmentation
+    assert claim.supplier_name == "BLUE SKY INDIA LIMITED"
+
+    # 2. Supplier GSTIN vs Buyer GSTIN detection
+    assert claim.gstin == "ASDF23486DD"
+    assert claim.gstin_format_valid is False
+    assert claim.buyer_name == "TECHGURUPLUS"
+    assert claim.buyer_gstin == "07PDUJS4678K1Z4"
+
+    # 3. Blank template amount handling (no guessing from phone numbers, pin codes, dates, percentages)
+    assert claim.total_amount == 0.0
+
+    # 4. Forensic anomaly warning
+    assert claim.forensic_anomaly is not None
+    assert "ASDF23486DD" in claim.forensic_anomaly
+    assert "07PDUJS4678K1Z4" in claim.forensic_anomaly
+
+    # 5. DocumentParseResponse formatting
+    claim.raw_text = sample_ocr_text
+    resp = build_document_parse_response(
+        claim,
+        extraction_method="RAPIDOCR_ONNX_300DPI",
+        extraction_confidence=0.92,
+    )
+    assert resp.supplier_name == "BLUE SKY INDIA LIMITED"
+    assert resp.gstin == "ASDF23486DD"
+    assert resp.gstin_format_valid is False
+    assert resp.buyer_name == "TECHGURUPLUS"
+    assert resp.buyer_gstin == "07PDUJS4678K1Z4"
+    assert resp.total_amount is None
+    assert resp.base_amount is None
+    assert resp.gst_amount is None
+    assert "total_amount" in resp.missing_fields
+    assert resp.forensic_anomaly is not None
+

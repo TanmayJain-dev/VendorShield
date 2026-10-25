@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../../lib/api';
+import { validateGstinModulo36 } from '../../lib/gstin';
 import { DocumentParseResponse } from '../../types/api';
 import {
   UploadCloud,
@@ -44,6 +45,7 @@ export default function IntakePage() {
   const [showRawText, setShowRawText] = useState(false);
   const [copiedRawText, setCopiedRawText] = useState(false);
   const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
 
   const loadHavellsLivePreset = () => {
     setFile(null);
@@ -82,12 +84,17 @@ export default function IntakePage() {
   };
 
   const handleFileProcess = async (selectedFile: File) => {
+    // 1. Immediately reset all fields the exact millisecond a file is selected/dropped
     setFile(selectedFile);
     setSelectedScenario(null);
     setError(null);
     setIsExtracting(true);
     setExtractionTelemetry(null);
     setMissingFields([]);
+    setSupplierName('');
+    setGstin('');
+    setInvoiceNumber('');
+    setTotalAmount('');
 
     try {
       const data = await api.parseDocument(selectedFile);
@@ -102,8 +109,10 @@ export default function IntakePage() {
       if (data.invoice_number) {
         setInvoiceNumber(data.invoice_number);
       }
-      if (data.total_amount && data.total_amount > 0) {
+      if (data.total_amount != null && data.total_amount > 0) {
         setTotalAmount(data.total_amount.toFixed(2));
+      } else {
+        setTotalAmount('');
       }
       setMissingFields(data.missing_fields || []);
     } catch (err: any) {
@@ -159,14 +168,12 @@ export default function IntakePage() {
     }
   };
 
-  const formattedAmount = (() => {
-    const num = parseFloat(totalAmount);
-    if (isNaN(num)) return '₹0.00';
-    return `₹${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  })();
-
   const parsedTotal = parseFloat(totalAmount) || 0;
-  const isGstinFormatValid = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstin);
+  const formattedAmount = parsedTotal > 0
+    ? `₹${parsedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : '₹0.00';
+
+  const gstinValidation = validateGstinModulo36(gstin);
 
   return (
     <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 animate-reveal-up text-zinc-900 dark:text-zinc-100">
@@ -309,14 +316,48 @@ export default function IntakePage() {
                   <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-lg border border-teal-100 dark:border-teal-900/40">
                     <div className="text-[10px] uppercase font-bold text-zinc-400">Modulo-36 Checksum</div>
                     <div className="font-bold font-mono mt-0.5 truncate">
-                      {extractionTelemetry.gstin_format_valid ? (
+                      {gstinValidation.valid ? (
                         <span className="text-emerald-600 dark:text-emerald-400">Verified Valid</span>
                       ) : (
-                        <span className="text-amber-600 dark:text-amber-400">Format Pending</span>
+                        <span className="text-rose-600 dark:text-rose-400" title={gstinValidation.reason}>
+                          Invalid / Checksum Failed
+                        </span>
                       )}
                     </div>
                   </div>
                 </div>
+
+                {/* Forensic Document Anomaly Callout */}
+                {(extractionTelemetry.forensic_anomaly ||
+                  extractionTelemetry.buyer_gstin ||
+                  extractionTelemetry.gstin_format_valid === false ||
+                  !gstinValidation.valid ||
+                  extractionTelemetry.total_amount == null ||
+                  extractionTelemetry.total_amount === 0) && (
+                  <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 text-amber-900 dark:text-amber-200 space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-bold text-xs text-amber-800 dark:text-amber-300">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                      <span>Forensic Document Anomaly</span>
+                    </div>
+                    <div className="text-[11px] leading-relaxed text-amber-800/90 dark:text-amber-300/90 space-y-1">
+                      {extractionTelemetry.forensic_anomaly ? (
+                        <p>{extractionTelemetry.forensic_anomaly}</p>
+                      ) : (
+                        <>
+                          {!gstinValidation.valid && (
+                            <p>&bull; Supplier GSTIN &lsquo;{gstin || 'None'}&rsquo; is structurally invalid ({gstinValidation.reason}).</p>
+                          )}
+                          {extractionTelemetry.buyer_gstin && (
+                            <p>&bull; Client/Buyer distinguished: {extractionTelemetry.buyer_name || 'Client'} (GSTIN: {extractionTelemetry.buyer_gstin}).</p>
+                          )}
+                          {(extractionTelemetry.total_amount == null || extractionTelemetry.total_amount === 0) && (
+                            <p>&bull; Invoice Total / Grand Total is blank on document &mdash; manual amount required.</p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Extracted Metadata Fields */}
                 <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-lg border border-teal-100 dark:border-teal-900/40 space-y-1.5">
@@ -486,16 +527,30 @@ export default function IntakePage() {
           <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-2xl p-6 sm:p-7 shadow-subtle space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800/80">
               <div>
-                <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-zinc-100">
-                  Invoice Claim Parameters
+                <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                  <span>{file ? 'Extracted Invoice Credentials' : 'Invoice Claim Parameters'}</span>
+                  {file && (
+                    <span className="text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300 border border-teal-300 dark:border-teal-800">
+                      AI Extracted
+                    </span>
+                  )}
                 </h2>
                 <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  Declared supplier details &amp; statutory billing credentials
+                  {file ? 'Autonomous telemetry extracted from document — zero manual entry required' : 'Declared supplier details & statutory billing credentials'}
                 </p>
               </div>
-              <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                <ShieldCheck className="h-4 w-4" />
-                <span>Pre-Disbursal Gated</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(!isEditing)}
+                  className="px-3 py-1 rounded-lg text-xs font-semibold border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>{isEditing ? '✓ Lock Credentials' : '✏️ Override Values'}</span>
+                </button>
+                <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                  <ShieldCheck className="h-4 w-4" />
+                  <span>Pre-Disbursal Gated</span>
+                </div>
               </div>
             </div>
 
@@ -507,138 +562,214 @@ export default function IntakePage() {
               </div>
             )}
 
-            {/* Form Fields */}
+            {/* Forensic Anomaly Callout (e.g. malformed supplier GST or buyer GST separation) */}
+            {extractionTelemetry?.forensic_anomaly && (
+              <div className="p-4 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 space-y-1.5">
+                <div className="flex items-center gap-2 text-xs font-bold text-amber-900 dark:text-amber-200">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                  <span>Forensic Discrepancy Flagged</span>
+                </div>
+                <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed font-mono">
+                  {extractionTelemetry.forensic_anomaly}
+                </p>
+              </div>
+            )}
+
+            {/* Form Fields vs Autonomous Verified Display */}
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-sm">
-                {/* Supplier Name */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+              {!isEditing ? (
+                /* Autonomous Read-Only Credential Cards */
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    {/* Card 1: Supplier Name */}
+                    <div className="p-4 rounded-xl bg-zinc-50/80 dark:bg-zinc-900/80 border border-zinc-200/90 dark:border-zinc-800/90 space-y-1">
+                      <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
+                        Supplier / Billed By
+                      </span>
+                      <div className="font-bold text-base text-zinc-900 dark:text-zinc-100 truncate">
+                        {supplierName || <span className="text-amber-500 text-sm italic">Not detected on scan</span>}
+                      </div>
+                      <span className="text-xs text-zinc-500">Autonomous Trade Name Detection</span>
+                    </div>
+
+                    {/* Card 2: Supplier GSTIN & Modulo-36 Badge */}
+                    <div className="p-4 rounded-xl bg-zinc-50/80 dark:bg-zinc-900/80 border border-zinc-200/90 dark:border-zinc-800/90 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
+                          Supplier GSTIN
+                        </span>
+                        {gstin && (
+                          gstinValidation.valid ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                              ✓ Valid Modulo-36
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                              ⚠️ Checksum Mismatch
+                            </span>
+                          )
+                        )}
+                      </div>
+                      <div className="font-mono font-bold text-base text-zinc-900 dark:text-zinc-100 tracking-wide">
+                        {gstin || <span className="text-amber-500 text-sm italic">Not detected</span>}
+                      </div>
+                      <span className="text-xs text-zinc-500 font-mono">15-Digit Statutory Identifier</span>
+                    </div>
+
+                    {/* Card 3: Invoice Reference */}
+                    <div className="p-4 rounded-xl bg-zinc-50/80 dark:bg-zinc-900/80 border border-zinc-200/90 dark:border-zinc-800/90 space-y-1">
+                      <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
+                        Invoice Reference
+                      </span>
+                      <div className="font-mono font-bold text-base text-zinc-900 dark:text-zinc-100 truncate">
+                        {invoiceNumber || <span className="text-amber-500 text-sm italic">INV-UNKNOWN</span>}
+                      </div>
+                      <span className="text-xs text-zinc-500">Tax Invoice Number</span>
+                    </div>
+
+                    {/* Card 4: Total Invoiced Amount */}
+                    <div className="p-4 rounded-xl bg-zinc-50/80 dark:bg-zinc-900/80 border border-zinc-200/90 dark:border-zinc-800/90 space-y-1">
+                      <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block">
+                        Claimed Gross Value
+                      </span>
+                      {parsedTotal > 0 ? (
+                        <div className="font-mono font-extrabold text-lg text-emerald-600 dark:text-emerald-400">
+                          {formattedAmount}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 pt-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={totalAmount}
+                            onChange={(e) => setTotalAmount(e.target.value)}
+                            placeholder="Enter amount (INR)"
+                            className="w-full px-2.5 py-1 text-xs font-mono rounded bg-white dark:bg-zinc-950 border border-amber-400 focus:outline-none"
+                          />
+                        </div>
+                      )}
+                      <span className="text-xs text-zinc-500">
+                        {parsedTotal > 0 ? 'Pre-Disbursal Base & Tax Sum' : '⚠️ Blank on invoice — enter to gate'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Detected Buyer / Client Context Pill */}
+                  {(extractionTelemetry?.buyer_name || extractionTelemetry?.buyer_gstin) && (
+                    <div className="p-3 rounded-lg bg-zinc-100/70 dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800/80 flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-400">
+                      <span>
+                        <strong className="text-zinc-700 dark:text-zinc-300">Billed To (Client):</strong> {extractionTelemetry.buyer_name || 'Client'}
+                      </span>
+                      {extractionTelemetry.buyer_gstin && (
+                        <span className="font-mono text-[11px] font-semibold text-zinc-500">
+                          GSTIN: {extractionTelemetry.buyer_gstin}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Editable Mode (Expanded for Manual Auditor Override) */
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-sm p-4 rounded-xl bg-zinc-50/40 dark:bg-zinc-900/40 border border-zinc-200/80 dark:border-zinc-800/80">
+                  {/* Supplier Name */}
+                  <div className="space-y-2">
                     <label className="block text-zinc-800 dark:text-zinc-200 font-bold text-sm">
                       Supplier Trade Name <span className="text-rose-500">*</span>
                     </label>
-                    {missingFields.includes('Supplier Trade Name') && (!supplierName || supplierName === 'Unknown Supplier') && (
-                      <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
-                        ⚠️ Not detected in scan
-                      </span>
-                    )}
+                    <input
+                      type="text"
+                      required
+                      value={supplierName}
+                      onChange={(e) => {
+                        setSupplierName(e.target.value);
+                        setSelectedScenario(null);
+                      }}
+                      className="w-full px-4 py-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-medium text-sm transition-colors shadow-xs"
+                      placeholder="e.g. Havells India Ltd"
+                    />
                   </div>
-                  <input
-                    type="text"
-                    required
-                    value={supplierName}
-                    onChange={(e) => {
-                      setSupplierName(e.target.value);
-                      setSelectedScenario(null);
-                    }}
-                    className="w-full px-4 py-3 bg-zinc-50/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-medium text-sm transition-colors shadow-xs"
-                    placeholder="e.g. Havells India Ltd"
-                  />
-                </div>
 
-                {/* Supplier GSTIN */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-zinc-800 dark:text-zinc-200 font-bold text-sm">
-                      Supplier GSTIN <span className="text-rose-500">*</span>
-                    </label>
-                    <div className="flex items-center gap-2">
-                      {missingFields.includes('Supplier GSTIN') && !gstin && (
-                        <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
-                          ⚠️ Not detected
-                        </span>
-                      )}
+                  {/* Supplier GSTIN */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-zinc-800 dark:text-zinc-200 font-bold text-sm">
+                        Supplier GSTIN <span className="text-rose-500">*</span>
+                      </label>
                       <span className="text-xs text-zinc-400 font-mono font-semibold">
                         {gstin.length}/15
                       </span>
                     </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        maxLength={15}
+                        value={gstin}
+                        onChange={(e) => {
+                          setGstin(e.target.value.toUpperCase());
+                          setSelectedScenario(null);
+                        }}
+                        className="w-full px-4 py-3 font-mono uppercase bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-bold text-sm transition-colors shadow-xs"
+                        placeholder="07AAACH0828A1ZE"
+                      />
+                      {gstin.length === 15 && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          {gstinValidation.valid ? (
+                            <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-1">
+                              ✓ Valid Modulo-36
+                            </span>
+                          ) : (
+                            <span className="text-xs font-bold px-2 py-0.5 rounded bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60 flex items-center gap-1" title={gstinValidation.reason}>
+                              ⚠️ Checksum Mismatch
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      maxLength={15}
-                      value={gstin}
-                      onChange={(e) => {
-                        setGstin(e.target.value.toUpperCase());
-                        setSelectedScenario(null);
-                      }}
-                      className="w-full px-4 py-3 font-mono uppercase bg-zinc-50/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-bold text-sm transition-colors shadow-xs"
-                      placeholder="07AAACH0828A1ZE"
-                    />
-                    {gstin.length === 15 && (
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        {isGstinFormatValid ? (
-                          <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60">
-                            Valid Modulo-36
-                          </span>
-                        ) : (
-                          <span className="text-xs font-bold px-2 py-0.5 rounded bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60">
-                            Invalid Format
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
 
-                {/* Invoice Number */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                  {/* Invoice Number */}
+                  <div className="space-y-2">
                     <label className="block text-zinc-800 dark:text-zinc-200 font-bold text-sm">
                       Invoice Number <span className="text-rose-500">*</span>
                     </label>
-                    {missingFields.includes('Invoice Number') && !invoiceNumber && (
-                      <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
-                        ⚠️ Not detected
-                      </span>
-                    )}
+                    <input
+                      type="text"
+                      required
+                      value={invoiceNumber}
+                      onChange={(e) => {
+                        setInvoiceNumber(e.target.value);
+                        setSelectedScenario(null);
+                      }}
+                      className="w-full px-4 py-3 font-mono bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-medium text-sm transition-colors shadow-xs"
+                      placeholder="INV-2026-9901"
+                    />
                   </div>
-                  <input
-                    type="text"
-                    required
-                    value={invoiceNumber}
-                    onChange={(e) => {
-                      setInvoiceNumber(e.target.value);
-                      setSelectedScenario(null);
-                    }}
-                    className="w-full px-4 py-3 font-mono bg-zinc-50/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-medium text-sm transition-colors shadow-xs"
-                    placeholder="INV-2026-9901"
-                  />
-                </div>
 
-                {/* Total Amount */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                  {/* Total Amount */}
+                  <div className="space-y-2">
                     <label className="block text-zinc-800 dark:text-zinc-200 font-bold text-sm">
                       Total Payable Amount (INR) <span className="text-rose-500">*</span>
                     </label>
-                    {missingFields.includes('Total Payable Amount') && (!totalAmount || parseFloat(totalAmount) <= 0) && (
-                      <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
-                        ⚠️ Verify Amount
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 font-mono text-zinc-400 text-sm font-semibold">
+                        ₹
                       </span>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-mono text-zinc-400 text-sm font-semibold">
-                      ₹
-                    </span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      required
-                      value={totalAmount}
-                      onChange={(e) => {
-                        setTotalAmount(e.target.value);
-                        setSelectedScenario(null);
-                      }}
-                      className="w-full pl-9 pr-4 py-3 font-mono bg-zinc-50/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-bold text-sm tabular-nums transition-colors shadow-xs"
-                      placeholder="498550.00"
-                    />
-                  </div>
-                  <div className="text-xs text-zinc-400 text-right tabular-nums">
-                    Formatted: <strong className="text-zinc-800 dark:text-zinc-200 text-sm font-bold">{formattedAmount}</strong>
+                      <input
+                        type="number"
+                        step="0.01"
+                        required
+                        value={totalAmount}
+                        onChange={(e) => {
+                          setTotalAmount(e.target.value);
+                          setSelectedScenario(null);
+                        }}
+                        className="w-full pl-9 pr-4 py-3 font-mono bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 font-bold text-sm tabular-nums transition-colors shadow-xs"
+                        placeholder="498550.00"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Real-time Dynamic Split-Settlement Routing Preview */}
               <div className="p-4 sm:p-5 rounded-2xl bg-zinc-50 dark:bg-[#090d16] border border-zinc-200/90 dark:border-zinc-800/90 space-y-3.5">

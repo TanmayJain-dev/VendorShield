@@ -74,6 +74,7 @@ export default function CaseDetailPage() {
 
   // Active Hop Tabs
   const [activeHopTab, setActiveHopTab] = useState<'all' | number>('all');
+  const [activeViewTab, setActiveViewTab] = useState<'verdict' | 'tinyfish' | 'topology' | 'audit'>('verdict');
 
   const [downloadingReport, setDownloadingReport] = useState(false);
 
@@ -535,9 +536,69 @@ export default function CaseDetailPage() {
       </div>
 
       {/* ==================================================================== */}
+      {/* EXECUTIVE FORENSIC COCKPIT TAB BAR */}
+      {/* ==================================================================== */}
+      <div className="flex items-center gap-2 border-b border-zinc-200/90 dark:border-zinc-800/90 pb-3 overflow-x-auto text-xs sm:text-sm">
+        <button
+          type="button"
+          onClick={() => setActiveViewTab('verdict')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all cursor-pointer ${
+            activeViewTab === 'verdict'
+              ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm'
+              : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
+          }`}
+        >
+          <Shield className="h-4 w-4 text-teal-500" />
+          <span>Executive Verdict &amp; Settlement</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveViewTab('tinyfish')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all cursor-pointer ${
+            activeViewTab === 'tinyfish'
+              ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm'
+              : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
+          }`}
+        >
+          <Radio className="h-4 w-4 text-teal-500" />
+          <span>TinyFish 4-Hop Pipeline</span>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 bg-teal-500/20 text-teal-600 dark:text-teal-400 rounded-md">
+            {evidence_items.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveViewTab('topology')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all cursor-pointer ${
+            activeViewTab === 'topology'
+              ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm'
+              : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
+          }`}
+        >
+          <TrendingDown className="h-4 w-4 text-amber-500" />
+          <span>Risk Topology &amp; Checks</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveViewTab('audit')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all cursor-pointer ${
+            activeViewTab === 'audit'
+              ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-sm'
+              : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
+          }`}
+        >
+          <Lock className="h-4 w-4 text-indigo-500" />
+          <span>Cryptographic Audit Chain</span>
+        </button>
+      </div>
+
+      {/* ==================================================================== */}
       {/* 3. 🚀 EXECUTIVE PRE-DISBURSAL TREASURY GATE & 2026 GSTN IMS SHIELD */}
       {/* ==================================================================== */}
-      {settlement && (
+      {activeViewTab === 'verdict' && settlement && (
         <div className={`relative overflow-hidden rounded-2xl border p-6 sm:p-7 shadow-subtle space-y-6 ${
           settlement.recommendation === 'FORENSIC_FREEZE'
             ? 'border-rose-200/90 dark:border-rose-900/50 bg-gradient-to-br from-rose-50/70 via-white to-zinc-50 dark:from-[#180a0e] dark:via-[#0e1420] dark:to-[#080c14]'
@@ -675,7 +736,8 @@ export default function CaseDetailPage() {
       {/* ==================================================================== */}
       {/* 4. 🐟 4-HOP AUTONOMOUS TINYFISH LIVE WEB AGENT TELEMETRY */}
       {/* ==================================================================== */}
-      <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-2xl p-6 sm:p-7 shadow-subtle space-y-5">
+      {activeViewTab === 'tinyfish' && (
+      <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-2xl p-6 sm:p-7 shadow-subtle space-y-5 animate-reveal-up">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200/80 dark:border-zinc-800/80 pb-3.5">
           <div className="flex items-center gap-2.5">
             <Radio className="h-4.5 w-4.5 text-teal-600 dark:text-teal-400 animate-pulse" />
@@ -843,11 +905,13 @@ export default function CaseDetailPage() {
           ))}
         </div>
       </div>
+      )}
 
       {/* ==================================================================== */}
       {/* 5. 5-VECTOR RISK TOPOLOGY RADAR GAUGES */}
       {/* ==================================================================== */}
-      {assessment && (
+      {activeViewTab === 'topology' && assessment && (
+        <div className="space-y-6 animate-reveal-up">
         <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-2xl p-6 sm:p-7 shadow-subtle space-y-5">
           <div className="flex items-center justify-between border-b border-zinc-200/80 dark:border-zinc-800/80 pb-3.5">
             <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
@@ -900,7 +964,6 @@ export default function CaseDetailPage() {
             </div>
           </div>
         </div>
-      )}
 
       {/* ==================================================================== */}
       {/* 6. DUAL INVESTIGATION GRID: REMITTANCE SECURITY VS RECONCILIATIONS */}
@@ -1012,17 +1075,21 @@ export default function CaseDetailPage() {
           </div>
         </div>
       </div>
+      </div>
+      )}
 
       {/* ==================================================================== */}
       {/* 7. 3-ACTION HUMAN REVIEWER DECISION & CRYPTOGRAPHIC AUDIT SEAL */}
       {/* ==================================================================== */}
-      <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-2xl p-6 sm:p-7 shadow-subtle space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200/80 dark:border-zinc-800/80 pb-3.5">
-          <div className="flex items-center gap-2.5">
-            <Lock className="h-5 w-5 text-teal-600 dark:text-teal-400" />
-            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-              Human Reviewer Decision &amp; Audit Seal
-            </h2>
+      {activeViewTab === 'verdict' && (
+        <div className="space-y-6 animate-reveal-up">
+        <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-2xl p-6 sm:p-7 shadow-subtle space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200/80 dark:border-zinc-800/80 pb-3.5">
+            <div className="flex items-center gap-2.5">
+              <Lock className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+              <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                Human Reviewer Decision &amp; Audit Seal
+              </h2>
           </div>
           {caseData.audit_hash_sha256 && (
             <button
@@ -1210,6 +1277,103 @@ export default function CaseDetailPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+      </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* 8. 🔒 CRYPTOGRAPHIC AUDIT CHAIN & PROVENANCE SEAL */}
+      {/* ==================================================================== */}
+      {activeViewTab === 'audit' && (
+        <div className="space-y-6 animate-reveal-up">
+          <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-2xl p-6 sm:p-7 shadow-subtle space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200/80 dark:border-zinc-800/80 pb-4">
+              <div className="flex items-center gap-2.5">
+                <Lock className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                <div>
+                  <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                    Cryptographic Audit Seal &amp; Chain of Custody
+                  </h2>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    SHA-256 tamper-evident merkle hash sealing invoice claims, 4-hop telemetry, and human review sign-offs
+                  </p>
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800 text-xs font-bold self-start sm:self-auto">
+                <ShieldCheck className="h-4 w-4" />
+                <span>Cryptographically Sealed</span>
+              </span>
+            </div>
+
+            {/* SHA-256 Hash Display */}
+            <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900/90 border border-zinc-200/80 dark:border-zinc-800 space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                <span>Dossier Root Hash (SHA-256)</span>
+                <button
+                  type="button"
+                  onClick={copyAuditHash}
+                  className="text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 text-xs font-semibold cursor-pointer"
+                >
+                  {copiedAuditHash ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                  <span>{copiedAuditHash ? 'Hash Copied!' : 'Copy Full Hash'}</span>
+                </button>
+              </div>
+              <div className="font-mono text-xs sm:text-sm font-bold text-teal-700 dark:text-teal-300 break-all select-all p-3 rounded-xl bg-zinc-100 dark:bg-zinc-950/80 border border-zinc-200/60 dark:border-zinc-800">
+                {caseData.audit_hash_sha256 || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'}
+              </div>
+            </div>
+
+            {/* Reviewer Activity History Timeline inside Audit */}
+            {review_history && review_history.length > 0 && (
+              <div className="space-y-3 pt-2">
+                <h3 className="text-xs uppercase font-bold text-zinc-400 tracking-wider">
+                  Cryptographic Action Log ({review_history.length} Event{review_history.length > 1 ? 's' : ''})
+                </h3>
+                <div className="space-y-2.5">
+                  {review_history.map(rh => (
+                    <div key={rh.action_id} className="p-4 bg-zinc-50 dark:bg-zinc-900/70 border border-zinc-200/80 dark:border-zinc-800 rounded-xl text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold px-2 py-0.5 rounded bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300">
+                            {rh.action}
+                          </span>
+                          <span className="font-bold text-zinc-900 dark:text-zinc-100">{rh.reviewer_id}</span>
+                          <span className="text-xs text-zinc-400 font-mono">({rh.reviewer_role || 'ap_analyst'})</span>
+                        </div>
+                        <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed font-sans">{rh.rationale}</p>
+                      </div>
+                      <span className="text-xs font-mono text-zinc-400 shrink-0">
+                        {rh.recorded_at ? new Date(rh.recorded_at).toLocaleString() : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Direct Export & Report Actions */}
+            <div className="flex items-center gap-3 pt-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleDownloadReport}
+                disabled={downloadingReport}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-xs font-bold transition shadow-xs cursor-pointer"
+              >
+                <Download className={`h-4 w-4 text-teal-600 ${downloadingReport ? 'animate-pulse' : ''}`} />
+                <span>{downloadingReport ? 'Generating Dossier...' : 'Download Markdown Forensic Dossier (.md)'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportIMSJson}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+              >
+                {copiedIMS ? <Check className="h-4 w-4 text-emerald-300" /> : <Download className="h-4 w-4" />}
+                <span>{copiedIMS ? 'IMS JSON Exported!' : 'Export 2026 GSTN IMS Action JSON'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

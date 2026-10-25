@@ -8,7 +8,7 @@ from ...schemas.invoice import (
 from ...schemas.enums import ExtractionStatus
 from ..validators.gstin_validator import validate_gstin_format
 from ..validators.arithmetic_validator import validate_invoice_arithmetic
-from .ocr_fallback import process_scanned_pdf, is_page_likely_scanned, extract_text_from_image
+from .ocr_fallback import process_scanned_pdf, is_page_likely_scanned, extract_text_from_image, normalize_corporate_name
 from .vendor_master import hash_bank_account, check_bank_mutation, calculate_beneficiary_match
 
 
@@ -51,14 +51,14 @@ ACCOUNT_NUM_PATTERN = re.compile(
 
 # Amount patterns
 TOTAL_AMOUNT_PATTERN = re.compile(
-    r"(?<!Sub)\b(?:Total\s*Invoice\s*Value|Grand\s*Total|Invoice\s*Total|Net\s*Payable|Total\s*Amount|Total\s*Due|Total)\b[\s.:]*"
-    r"(?:₹|INR|Rs\.?)?\s*([\d,]+\.?\d*)",
+    r"(?<!Sub)\b(?:Total\s*Invoice\s*Value|Grand\s*Total|Invoice\s*Total|Net\s*Payable|Total\s*Amount|Total\s*Payable|Total\s*Due|Total\s*Value)\b"
+    r"[\s.:]*(?:₹|INR|Rs\.?)?\s*([\d,]+\.\d{1,2}|\b[\d,]+\b(?!\s*%))",
     re.IGNORECASE
 )
 
 TAXABLE_AMOUNT_PATTERN = re.compile(
     r"(?:Taxable\s*(?:Amount|Value)|Sub\s*Total|Subtotal|Total\s*Before\s*Tax)[\s.:]*"
-    r"(?:₹|INR|Rs\.?)?\s*([\d,]+\.?\d*)",
+    r"(?:₹|INR|Rs\.?)?\s*([\d,]+\.\d{1,2}|\b[\d,]+\b(?!\s*%))",
     re.IGNORECASE
 )
 
@@ -330,31 +330,86 @@ def parse_invoice_text(
     if file_bytes:
         file_sha256 = hashlib.sha256(file_bytes).hexdigest()
 
-    # 1. GSTIN (prioritize explicit supplier GSTIN over buyer)
-    buyer_match = BUYER_GSTIN_PATTERN.search(text)
-    buyer_gstin = re.sub(r"[\s\-_]", "", buyer_match.group(1)).upper() if buyer_match else None
-    
-    supp_match = SUPPLIER_GSTIN_PATTERN.search(text)
-    if supp_match:
-        gstin = re.sub(r"[\s\-_]", "", supp_match.group(1)).upper()
+    # 1. Zone Splitting: Header/Supplier Zone vs Buyer/Client Zone
+    buyer_zone_split_match = re.search(
+        r"\b(?:Client\s*Name|Bill\s*To|Buyer|Billed\s*To|Consignee|Customer\s*Name|Ship\s*To|Delivery\s*Address)\b",
+        text,
+        re.IGNORECASE
+    )
+    if buyer_zone_split_match:
+        supplier_zone = text[:buyer_zone_split_match.start()]
+        buyer_zone = text[buyer_zone_split_match.start():]
     else:
-        all_raw = GSTIN_PATTERN.findall(text)
-        all_gstins = [re.sub(r"[\s\-_]", "", g).upper() for g in all_raw]
-        if all_gstins:
-            if buyer_gstin and len(all_gstins) > 1:
-                filtered = [g for g in all_gstins if g != buyer_gstin]
-                gstin = filtered[0] if filtered else all_gstins[0]
-            else:
-                gstin = all_gstins[0]
-        else:
-            gstin = None
+        supplier_zone = text
+        buyer_zone = ""
 
+    # Extract Buyer Name and Buyer GSTIN from Buyer Zone
+    buyer_name = None
+    buyer_gstin = None
+    if buyer_zone:
+        b_name_match = re.search(
+            r"(?:Client\s*Name|Buyer(?:\s*Name)?|Customer(?:\s*Name)?|Bill\s*To|Consignee)[\s.:]+([A-Za-z0-9&.,\-\s]{3,40}?)(?:\n|\bDate\b|\bAddress\b|\bInvoice\b|$)",
+            buyer_zone,
+            re.IGNORECASE
+        )
+        if b_name_match:
+            buyer_name = b_name_match.group(1).strip()
+
+        b_gst_match = re.search(
+            r"(?:GSTIN(?:/UIN)?|GST(?:\s*No\.?|\s*Number|\s*#)?|GSTNO\.)[\s.:/]*([0-9]{2}[\s\-_]?[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}[\s\-_]?[Zz][0-9A-Z]{1})",
+            buyer_zone,
+            re.IGNORECASE
+        )
+        if b_gst_match:
+            buyer_gstin = re.sub(r"[\s\-_]", "", b_gst_match.group(1)).upper()
+        else:
+            all_b_gstins = GSTIN_PATTERN.findall(buyer_zone)
+            if all_b_gstins:
+                buyer_gstin = re.sub(r"[\s\-_]", "", all_b_gstins[0]).upper()
+
+    # Extract Supplier GSTIN & Detect Malformed Supplier GST (Forensic Fraud Signal)
+    gstin = None
+    forensic_anomaly = None
+
+    supp_explicit_match = re.search(
+        r"(?:GSTIN(?:/UIN)?|GST(?:\s*No\.?|\s*Number|\s*#)?|GSTNO\.)[\s.:/]*([A-Za-z0-9\-_]{6,18})",
+        supplier_zone,
+        re.IGNORECASE
+    )
+    if supp_explicit_match:
+        gstin = re.sub(r"[\s\-_]", "", supp_explicit_match.group(1)).upper()
+        is_gst_valid, reason = validate_gstin_format(gstin)
+        if not is_gst_valid:
+            forensic_anomaly = (
+                f"⚠️ Supplier GST No. '{gstin}' is structurally invalid ({len(gstin)}/15 chars, fails Modulo-36). "
+                f"Buyer GSTIN '{buyer_gstin or 'None'}' detected in Client section."
+            )
+            warnings.append(forensic_anomaly)
+    else:
+        # Check standard 15-char GSTIN pattern in Supplier Zone
+        supp_15 = GSTIN_PATTERN.findall(supplier_zone)
+        if supp_15:
+            gstin = re.sub(r"[\s\-_]", "", supp_15[0]).upper()
+        else:
+            # Fall back to full-document 15-char GSTIN search only if no GST label in Supplier Zone
+            # AND matched 15-char GSTIN is not buyer GSTIN
+            all_doc_gstins = [re.sub(r"[\s\-_]", "", g).upper() for g in GSTIN_PATTERN.findall(text)]
+            candidates = [g for g in all_doc_gstins if g != buyer_gstin]
+            if candidates:
+                gstin = candidates[0]
+            else:
+                gstin = None
+                if buyer_gstin:
+                    warnings.append(
+                        f"No Supplier GSTIN found; Buyer GSTIN '{buyer_gstin}' detected in Client section."
+                    )
 
     if gstin:
         extraction_meta["gstin"] = FieldExtractionMeta(
             status=ExtractionStatus.EXTRACTED,
-            confidence=0.95,
-            source_text=gstin
+            confidence=0.95 if not forensic_anomaly else 0.4,
+            source_text=gstin,
+            notes=forensic_anomaly
         )
     else:
         extraction_meta["gstin"] = FieldExtractionMeta(
@@ -397,24 +452,31 @@ def parse_invoice_text(
             confidence=0.0
         )
 
-    # 4. Supplier Trade Name & Legal Name
+    # 4. Supplier Trade Name & Legal Name (Corporate Name Space Normalizer)
     supplier_name = default_supplier
     legal_name = None
-    
+
     legal_match = LEGAL_NAME_PATTERN.search(text)
     if legal_match:
-        legal_name = legal_match.group(1).strip()
+        legal_name = normalize_corporate_name(legal_match.group(1).strip())
 
-    supp_label_match = SUPPLIER_LABEL_PATTERN.search(text)
+    supp_label_match = SUPPLIER_LABEL_PATTERN.search(supplier_zone or text)
     if supp_label_match and (default_supplier == "Unknown Supplier" or not default_supplier):
-        supplier_name = supp_label_match.group(1).strip()
+        supplier_name = normalize_corporate_name(supp_label_match.group(1).strip())
     elif default_supplier == "Unknown Supplier" or not default_supplier:
-        lines = [line.strip() for line in text.split("\n") if line.strip()]
-        for line in lines[:5]:
-            if not any(k in line.lower() for k in ["tax invoice", "invoice", "gstin", "original", "bill", "extraction error", "error"]):
-                if 3 < len(line) < 50:
-                    supplier_name = line
+        lines = [line.strip() for line in (supplier_zone or text).split("\n") if line.strip()]
+        for line in lines[:6]:
+            if not any(k in line.lower() for k in ["tax invoice", "invoice", "gstin", "gstno", "original", "bill", "extraction error", "error"]):
+                if 3 < len(line) < 60:
+                    supplier_name = normalize_corporate_name(line)
                     break
+        # Fallback to footer 'For <Company Name>' if header name was generic
+        if supplier_name in ("Unknown Supplier", "Unknown"):
+            for_match = re.search(r"(?:For|For\s+M/s\.?)\s+([A-Za-z0-9&.,\-\s]{3,60}?)(?:\n|Authorised|Authorized|$)", text, re.IGNORECASE)
+            if for_match:
+                supplier_name = normalize_corporate_name(for_match.group(1).strip())
+    else:
+        supplier_name = normalize_corporate_name(supplier_name)
 
     # 5. Billing Address
     addr_match = ADDRESS_PATTERN.search(text)
@@ -425,7 +487,7 @@ def parse_invoice_text(
     raw_bank_account = acc_match.group(1) if acc_match else None
     bank_account_masked = mask_bank_account(raw_bank_account) if raw_bank_account else None
     bank_account_hash = hash_bank_account(raw_bank_account)
-    
+
     ifsc_match = IFSC_PATTERN.search(text)
     ifsc_code = ifsc_match.group(1).upper() if ifsc_match else None
 
@@ -463,25 +525,56 @@ def parse_invoice_text(
             confidence=0.0
         )
 
-    # 7. Financial Totals & Taxes
-    tot_match = TOTAL_AMOUNT_PATTERN.search(text)
+    # 7. Financial Totals & Taxes (Strict parsing - never match phone/pin/dates/percentages as total)
     total_amount = 0.0
-    if tot_match:
-        try:
-            total_amount = float(clean_amount(tot_match.group(1)))
-            extraction_meta["total_amount"] = FieldExtractionMeta(
-                status=ExtractionStatus.EXTRACTED,
-                confidence=0.9,
-                source_text=tot_match.group(0)
-            )
-        except ValueError:
-            total_amount = 0.0
-            errors.append(f"Failed to parse total amount '{tot_match.group(1)}'")
-    else:
+    total_extracted = False
+
+    for line in text.split("\n"):
+        line_clean = line.strip()
+        if re.search(r"\b(?:Total\s*Invoice\s*Value|Grand\s*Total|Invoice\s*Total|Net\s*Payable|Total\s*Amount|Total\s*Payable|Total\s*Due)\b", line_clean, re.IGNORECASE):
+            amt_match = re.search(r"(?:₹|INR|Rs\.?)\s*([\d,]+\.?\d*)|(?<=\s)([\d,]+\.\d{2})\b|(?<=\s)([\d,]{3,})\b", line_clean)
+            if amt_match:
+                val_str = amt_match.group(1) or amt_match.group(2) or amt_match.group(3)
+                if val_str and not line_clean[amt_match.end():].strip().startswith("%"):
+                    try:
+                        amt = float(clean_amount(val_str))
+                        digits_only = re.sub(r"\D", "", val_str)
+                        if (len(digits_only) not in (6, 10, 11, 12) or "." in val_str) and amt > 0:
+                            total_amount = amt
+                            total_extracted = True
+                            extraction_meta["total_amount"] = FieldExtractionMeta(
+                                status=ExtractionStatus.EXTRACTED,
+                                confidence=0.9,
+                                source_text=line_clean
+                            )
+                            break
+                    except ValueError:
+                        pass
+
+    if not total_extracted:
+        tot_match = TOTAL_AMOUNT_PATTERN.search(text)
+        if tot_match:
+            val_str = tot_match.group(1)
+            if val_str and not text[tot_match.end(1):tot_match.end(1)+2].strip().startswith("%"):
+                try:
+                    amt = float(clean_amount(val_str))
+                    digits_only = re.sub(r"\D", "", val_str)
+                    if (len(digits_only) not in (6, 10, 11, 12) or "." in val_str) and amt > 0:
+                        total_amount = amt
+                        total_extracted = True
+                        extraction_meta["total_amount"] = FieldExtractionMeta(
+                            status=ExtractionStatus.EXTRACTED,
+                            confidence=0.9,
+                            source_text=tot_match.group(0)
+                        )
+                except ValueError:
+                    pass
+
+    if not total_extracted:
         extraction_meta["total_amount"] = FieldExtractionMeta(
             status=ExtractionStatus.UNAVAILABLE,
             confidence=0.0,
-            notes="Total amount not found"
+            notes="Total amount not found on invoice"
         )
         warnings.append("Total amount not found in document")
 
@@ -489,87 +582,81 @@ def parse_invoice_text(
     taxable_amount = 0.0
     taxable_extracted = False
     if taxable_match:
-        try:
-            taxable_amount = float(clean_amount(taxable_match.group(1)))
-            taxable_extracted = True
-            extraction_meta["taxable_amount"] = FieldExtractionMeta(
-                status=ExtractionStatus.EXTRACTED,
-                confidence=0.85,
-                source_text=taxable_match.group(0)
-            )
-        except ValueError:
-            taxable_amount = 0.0
+        val_str = taxable_match.group(1)
+        if val_str and not text[taxable_match.end(1):taxable_match.end(1)+2].strip().startswith("%"):
+            try:
+                amt = float(clean_amount(val_str))
+                digits_only = re.sub(r"\D", "", val_str)
+                if (len(digits_only) not in (6, 10, 11, 12) or "." in val_str) and amt > 0:
+                    taxable_amount = amt
+                    taxable_extracted = True
+                    extraction_meta["taxable_amount"] = FieldExtractionMeta(
+                        status=ExtractionStatus.EXTRACTED,
+                        confidence=0.85,
+                        source_text=taxable_match.group(0)
+                    )
+            except ValueError:
+                pass
 
-    # Explicit Tax Breakdowns (CGST, SGST, IGST)
-    cgst = 0.0
-    sgst = 0.0
-    igst = 0.0
-    cgst_extracted = False
-    sgst_extracted = False
-    igst_extracted = False
+    # Helper function to extract explicit tax line amount avoiding bare percentages
+    def extract_tax_line(tax_name: str, doc_text: str) -> Tuple[float, float, bool]:
+        pattern = re.compile(
+            rf"{tax_name}(?:\s*(?:@|at)?\s*([0-9.]+)\s*%)?(?:[\s.:]|Amount)*(?:₹|INR|Rs\.?)?\s*([\d,]+\.\d{{1,2}}|\b[\d,]+\b(?!\s*%))",
+            re.IGNORECASE
+        )
+        for m in pattern.finditer(doc_text):
+            rate = float(m.group(1)) if m.group(1) else (18.0 if "IGST" in tax_name else 9.0)
+            amt_str = m.group(2)
+            if amt_str:
+                after_amt = doc_text[m.end(2):m.end(2)+2].strip()
+                if after_amt.startswith("%"):
+                    continue
+                amt = clean_amount(amt_str)
+                if amt > 0:
+                    return rate, amt, True
+        return (18.0 if "IGST" in tax_name else 9.0), 0.0, False
 
-    cgst_match = CGST_PATTERN.search(text)
-    if cgst_match:
-        try:
-            cgst_rate = float(cgst_match.group(1)) if cgst_match.group(1) else 9.0
-            cgst = clean_amount(cgst_match.group(2))
-            cgst_extracted = True
-            tax_breakdown.append(TaxBreakdownItem(
-                tax_type="CGST",
-                rate_pct=cgst_rate,
-                taxable_amount=taxable_amount,
-                tax_amount=cgst,
-                status=ExtractionStatus.EXTRACTED
-            ))
-            extraction_meta["cgst"] = FieldExtractionMeta(
-                status=ExtractionStatus.EXTRACTED,
-                confidence=0.9,
-                source_text=cgst_match.group(0)
-            )
-        except Exception:
-            pass
+    cgst_rate, cgst, cgst_extracted = extract_tax_line("CGST", text)
+    if cgst_extracted:
+        tax_breakdown.append(TaxBreakdownItem(
+            tax_type="CGST",
+            rate_pct=cgst_rate,
+            taxable_amount=taxable_amount,
+            tax_amount=cgst,
+            status=ExtractionStatus.EXTRACTED
+        ))
+        extraction_meta["cgst"] = FieldExtractionMeta(
+            status=ExtractionStatus.EXTRACTED,
+            confidence=0.9
+        )
 
-    sgst_match = SGST_PATTERN.search(text)
-    if sgst_match:
-        try:
-            sgst_rate = float(sgst_match.group(1)) if sgst_match.group(1) else 9.0
-            sgst = clean_amount(sgst_match.group(2))
-            sgst_extracted = True
-            tax_breakdown.append(TaxBreakdownItem(
-                tax_type="SGST",
-                rate_pct=sgst_rate,
-                taxable_amount=taxable_amount,
-                tax_amount=sgst,
-                status=ExtractionStatus.EXTRACTED
-            ))
-            extraction_meta["sgst"] = FieldExtractionMeta(
-                status=ExtractionStatus.EXTRACTED,
-                confidence=0.9,
-                source_text=sgst_match.group(0)
-            )
-        except Exception:
-            pass
+    sgst_rate, sgst, sgst_extracted = extract_tax_line("(?:SGST|UTGST|State\\s*GST)", text)
+    if sgst_extracted:
+        tax_breakdown.append(TaxBreakdownItem(
+            tax_type="SGST",
+            rate_pct=sgst_rate,
+            taxable_amount=taxable_amount,
+            tax_amount=sgst,
+            status=ExtractionStatus.EXTRACTED
+        ))
+        extraction_meta["sgst"] = FieldExtractionMeta(
+            status=ExtractionStatus.EXTRACTED,
+            confidence=0.9
+        )
 
-    igst_match = IGST_PATTERN.search(text)
-    if igst_match:
-        try:
-            igst_rate = float(igst_match.group(1)) if igst_match.group(1) else 18.0
-            igst = clean_amount(igst_match.group(2))
-            igst_extracted = True
-            tax_breakdown.append(TaxBreakdownItem(
-                tax_type="IGST",
-                rate_pct=igst_rate,
-                taxable_amount=taxable_amount,
-                tax_amount=igst,
-                status=ExtractionStatus.EXTRACTED
-            ))
-            extraction_meta["igst"] = FieldExtractionMeta(
-                status=ExtractionStatus.EXTRACTED,
-                confidence=0.9,
-                source_text=igst_match.group(0)
-            )
-        except Exception:
-            pass
+    igst_rate, igst, igst_extracted = extract_tax_line("IGST", text)
+    if igst_extracted:
+        tax_breakdown.append(TaxBreakdownItem(
+            tax_type="IGST",
+            rate_pct=igst_rate,
+            taxable_amount=taxable_amount,
+            tax_amount=igst,
+            status=ExtractionStatus.EXTRACTED
+        ))
+        extraction_meta["igst"] = FieldExtractionMeta(
+            status=ExtractionStatus.EXTRACTED,
+            confidence=0.9
+        )
 
     # Round off & discounts
     round_off = 0.0
@@ -592,7 +679,7 @@ def parse_invoice_text(
     tax_inferred = False
     tax_inference_reason = None
     if not (cgst_extracted or sgst_extracted or igst_extracted):
-        if taxable_extracted and total_amount > taxable_amount:
+        if total_extracted and taxable_extracted and total_amount > taxable_amount:
             diff_tax = round(total_amount - taxable_amount - round_off + discount_amount, 2)
             tax_inferred = True
             tax_inference_reason = f"Tax breakdown not explicitly detailed in invoice text; residual tax ₹{diff_tax:.2f}."
@@ -614,7 +701,7 @@ def parse_invoice_text(
                 confidence=0.0,
                 notes="Tax rate / split unstated in document"
             )
-        elif total_amount > 0 and not taxable_extracted:
+        elif total_extracted and total_amount > 0 and not taxable_extracted:
             taxable_amount = round(total_amount / 1.18, 2)
             inferred_tax = round(total_amount - taxable_amount, 2)
             cgst = round(inferred_tax / 2, 2)
@@ -644,6 +731,28 @@ def parse_invoice_text(
             extraction_meta["igst"] = FieldExtractionMeta(
                 status=ExtractionStatus.UNAVAILABLE,
                 confidence=0.0
+            )
+        else:
+            # Document has NO amounts extracted (e.g. blank invoice template)
+            extraction_meta["taxable_amount"] = FieldExtractionMeta(
+                status=ExtractionStatus.UNAVAILABLE,
+                confidence=0.0,
+                notes="Taxable amount not present on document"
+            )
+            extraction_meta["cgst"] = FieldExtractionMeta(
+                status=ExtractionStatus.UNAVAILABLE,
+                confidence=0.0,
+                notes="CGST not present on document"
+            )
+            extraction_meta["sgst"] = FieldExtractionMeta(
+                status=ExtractionStatus.UNAVAILABLE,
+                confidence=0.0,
+                notes="SGST not present on document"
+            )
+            extraction_meta["igst"] = FieldExtractionMeta(
+                status=ExtractionStatus.UNAVAILABLE,
+                confidence=0.0,
+                notes="IGST not present on document"
             )
 
     # 9. Line Items from text
@@ -699,6 +808,9 @@ def parse_invoice_text(
         supplier_name=supplier_name,
         legal_name=legal_name,
         gstin=gstin,
+        buyer_name=buyer_name,
+        buyer_gstin=buyer_gstin,
+        forensic_anomaly=forensic_anomaly,
         billing_address=billing_address,
         discount_amount=discount_amount,
         round_off=round_off,
@@ -859,15 +971,6 @@ def build_document_parse_response(
     """
     Constructs clean, structured response for real-time document telemetry preview and form auto-fill.
     """
-    base_amt = claim.taxable_amount if claim.taxable_amount > 0 else round(claim.total_amount / 1.18, 2)
-    gst_amt = round((claim.cgst + claim.sgst + claim.igst), 2)
-    if gst_amt == 0 and claim.total_amount > base_amt:
-        gst_amt = round(claim.total_amount - base_amt, 2)
-
-    tax_rate = None
-    if base_amt > 0 and gst_amt > 0:
-        tax_rate = round((gst_amt / base_amt) * 100, 1)
-
     missing = []
     if not claim.gstin or not claim.gstin.strip():
         missing.append("Supplier GSTIN")
@@ -875,12 +978,27 @@ def build_document_parse_response(
         missing.append("Supplier Trade Name")
     if not claim.invoice_number or "UNKNOWN" in claim.invoice_number.upper():
         missing.append("Invoice Number")
-    if claim.total_amount <= 0:
-        missing.append("Total Payable Amount")
     if not claim.ifsc_code:
         missing.append("Bank IFSC Code")
     if claim.total_amount > 50000 and not claim.eway_bill_no:
         missing.append("e-Way Bill Number")
+
+    if claim.total_amount is None or claim.total_amount <= 0:
+        total_amount = None
+        base_amt = None
+        gst_amt = None
+        tax_rate = None
+        if "total_amount" not in missing:
+            missing.append("total_amount")
+        if "Total Payable Amount" not in missing:
+            missing.append("Total Payable Amount")
+    else:
+        total_amount = claim.total_amount
+        base_amt = claim.taxable_amount if claim.taxable_amount > 0 else round(claim.total_amount / 1.18, 2)
+        gst_amt = round((claim.cgst + claim.sgst + claim.igst), 2)
+        if gst_amt == 0 and claim.total_amount > base_amt:
+            gst_amt = round(claim.total_amount - base_amt, 2)
+        tax_rate = round((gst_amt / base_amt) * 100, 1) if base_amt and gst_amt else 18.0
 
     preview = (claim.raw_text or "").strip()[:500]
     if not preview and claim.parsing_errors:
@@ -890,6 +1008,7 @@ def build_document_parse_response(
     if claim.gstin:
         valid_gst, msg = validate_gstin_format(claim.gstin)
         gstin_checksum_msg = msg
+        claim.gstin_format_valid = valid_gst
 
     return DocumentParseResponse(
         supplier_name=claim.supplier_name,
@@ -897,12 +1016,15 @@ def build_document_parse_response(
         gstin=claim.gstin,
         gstin_format_valid=claim.gstin_format_valid,
         gstin_checksum_message=gstin_checksum_msg,
+        buyer_name=claim.buyer_name,
+        buyer_gstin=claim.buyer_gstin,
+        forensic_anomaly=claim.forensic_anomaly,
         invoice_number=claim.invoice_number,
         invoice_date=claim.invoice_date,
-        total_amount=claim.total_amount,
+        total_amount=total_amount,
         base_amount=base_amt,
         gst_amount=gst_amt,
-        detected_tax_rate=tax_rate or 18.0,
+        detected_tax_rate=tax_rate,
         line_items=claim.line_items,
         bank_account_masked=claim.bank_account_masked,
         ifsc_code=claim.ifsc_code,
@@ -913,6 +1035,6 @@ def build_document_parse_response(
         extraction_method=extraction_method,
         extraction_confidence=round(extraction_confidence, 2),
         is_scanned_image=claim.is_scanned_image,
-        missing_fields=missing,
+        missing_fields=list(dict.fromkeys(missing)),
         warnings=claim.parsing_warnings
     )

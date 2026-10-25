@@ -37,7 +37,7 @@ export default function IntakePage() {
   const [totalAmount, setTotalAmount] = useState('498550.00');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedScenario, setSelectedScenario] = useState<'havells' | 'benchmark' | 'ghost' | null>('havells');
+  const [selectedScenario, setSelectedScenario] = useState<'havells' | 'benchmark' | 'ghost' | 'bluesky' | 'max' | null>('havells');
 
   // Real-time Extraction States
   const [isExtracting, setIsExtracting] = useState(false);
@@ -47,6 +47,30 @@ export default function IntakePage() {
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [scanStep, setScanStep] = useState<string>('');
+
+  const loadBlueSkyPreset = () => {
+    setFile(null);
+    setExtractionTelemetry(null);
+    setMissingFields([]);
+    setSupplierName('Blue Sky India Limited');
+    setGstin('ASDF23486DD');
+    setInvoiceNumber('76/2017-18');
+    setTotalAmount('498550.00');
+    setSelectedScenario('bluesky');
+    setError(null);
+  };
+
+  const loadMaxEnterprisesPreset = () => {
+    setFile(null);
+    setExtractionTelemetry(null);
+    setMissingFields([]);
+    setSupplierName('Max Enterprises');
+    setGstin('29AAACP7879D1Z0');
+    setInvoiceNumber('INV-2020-001');
+    setTotalAmount('52510.00');
+    setSelectedScenario('max');
+    setError(null);
+  };
 
   const loadHavellsLivePreset = () => {
     setFile(null);
@@ -446,6 +470,46 @@ export default function IntakePage() {
             </div>
 
             <div className="space-y-3">
+                            {/* Scenario: Blue Sky India Shell Anomaly */}
+              <button
+                type="button"
+                onClick={loadBlueSkyPreset}
+                className={`w-full p-3.5 text-left rounded-xl border transition-all relative ${
+                  selectedScenario === 'bluesky'
+                    ? 'border-rose-600 dark:border-rose-500 bg-rose-50/60 dark:bg-rose-950/30 ring-2 ring-rose-500/30 shadow-sm'
+                    : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100">76/2017-18</span>
+                  <span className="text-sm font-mono font-extrabold text-rose-700 dark:text-rose-400">₹4,98,550</span>
+                </div>
+                <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100 mt-1">Blue Sky India Limited</div>
+                <div className="text-xs text-rose-600 dark:text-rose-400 mt-1 leading-snug font-medium">
+                  ⚠️ Invalid 11-char GST + NCLT petition + DGGI raid radar.
+                </div>
+              </button>
+
+              {/* Scenario: Max Enterprises Clean Supplier */}
+              <button
+                type="button"
+                onClick={loadMaxEnterprisesPreset}
+                className={`w-full p-3.5 text-left rounded-xl border transition-all relative ${
+                  selectedScenario === 'max'
+                    ? 'border-emerald-600 dark:border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/30 ring-2 ring-emerald-500/30 shadow-sm'
+                    : 'border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100">INV-2020-001</span>
+                  <span className="text-sm font-mono font-extrabold text-emerald-700 dark:text-emerald-400">₹52,510</span>
+                </div>
+                <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100 mt-1">Max Enterprises (Hardware)</div>
+                <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-snug">
+                  Active GSTIN + Dell monitors + MSME split-settlement pass.
+                </div>
+              </button>
+
               {/* Scenario 0: Havells Live Enterprise Preset */}
               <button
                 type="button"

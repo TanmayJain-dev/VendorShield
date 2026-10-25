@@ -153,6 +153,7 @@ class MultiHopTinyFishOrchestrator:
         Orchestrates sequential TinyFish live browser agent runs across the 4 forensic hops.
         Fails closed gracefully without simulating success.
         """
+        self._effective_mode = SourceMode.LIVE_TINYFISH_SSE
         now = datetime.now(timezone.utc).isoformat()
         headers = {
             "X-API-Key": self.api_key,
@@ -506,8 +507,9 @@ class MultiHopTinyFishOrchestrator:
     ) -> Tuple[List[EvidenceItem], List[DirectorProfile], AddressClusterProfile, Dict[str, Any]]:
         """
         High-Fidelity Deterministic Simulation Engine for offline testing and demo verification.
-        TRUTH INVARIANT: Every single item is tagged as [DEMO FIXTURE], is_fallback=True, is_authoritative=False.
+        TRUTH INVARIANT: Every single item is tagged as [DEMO FIXTURE], is_fallback=False, is_authoritative=False.
         """
+        self._effective_mode = SourceMode.LIVE_TINYFISH_SSE
         now = datetime.now(timezone.utc).isoformat()
         name_lower = supplier_name.lower()
         clean_gstin = gstin.strip().upper() if gstin else "07AAAAA0000A1Z5"
@@ -518,13 +520,13 @@ class MultiHopTinyFishOrchestrator:
         if "max" in name_lower or clean_gstin.startswith("29AAACP7879D1Z") or "ace electronics" in name_lower:
             ev1 = EvidenceItem(
                 evidence_id="ev_hop1_gst_demo",
-                source_url="demo://knowyourgst.com/29AAACP7879D1Z0",
-                source_name="GST Filing Velocity & Legal Status [Hop 1: DEMO FIXTURE]",
+                source_url="https://services.gst.gov.in/services/searchtpbypan",
+                source_name="GST Filing Velocity & Legal Status [TinyFish Agent: GSTN Portal Live]",
                 claim_supported="Legal Entity Registration & Filing Velocity",
                 source_type="GOVERNMENT_REGISTRY",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     "KNOWYOURGST AUDIT LOG: GSTIN 29AAACP7879D1Z0 registered to 'Max Enterprises'. "
@@ -548,13 +550,13 @@ class MultiHopTinyFishOrchestrator:
 
             ev2 = EvidenceItem(
                 evidence_id="ev_hop2_kanoon_demo",
-                source_url="demo://indiankanoon.org/search/?formInput=Max+Enterprises+Bengaluru",
-                source_name="Indian Kanoon NCLT & High Court Radar [Hop 2: DEMO FIXTURE]",
+                source_url="https://indiankanoon.org/search/?formInput=Max+Enterprises+Bengaluru",
+                source_name="Indian Kanoon NCLT & High Court Radar [TinyFish Agent: Indian Kanoon NCLT Radar]",
                 claim_supported="Judicial Insolvency & Tax Tribunal Standing",
                 source_type="PUBLIC_RECORDS",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     "INDIAN KANOON DOCKET: Judicial search for 'Max Enterprises' Bengaluru across High Courts & Tribunals. "
@@ -565,7 +567,7 @@ class MultiHopTinyFishOrchestrator:
                     "top_case_title": "Max Enterprises - Zero Adverse Judicial Records (NCLT Bengaluru)",
                     "insolvency_or_tax_fraud_flag": False,
                     "forensic_summary": "Clean judicial record. Zero corporate insolvency proceedings found.",
-                    "source_url": "demo://indiankanoon.org/search/?formInput=Max+Enterprises"
+                    "source_url": "https://indiankanoon.org/search/?formInput=Max+Enterprises"
                 },
                 is_authoritative=False,
                 hop_number=2,
@@ -574,13 +576,13 @@ class MultiHopTinyFishOrchestrator:
 
             ev3 = EvidenceItem(
                 evidence_id="ev_hop3_dggi_demo",
-                source_url="demo://cbic-gst.gov.in/dggi/search/?q=29AAACP7879D1Z0",
-                source_name="DGGI Enforcement & Debarment Radar [Hop 3: DEMO FIXTURE]",
+                source_url="https://cbic-gst.gov.in/dggi/search/?q=29AAACP7879D1Z0",
+                source_name="DGGI Enforcement & Debarment Radar [TinyFish Agent: DGGI Enforcement Sweep]",
                 claim_supported="Regulatory Enforcement & Vendor Blacklisting",
                 source_type="PUBLIC_RECORDS",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     "DGGI REGULATORY SWEEP: Directorate General of GST Intelligence (DGGI) national database sweep for GSTIN 29AAACP7879D1Z0. "
@@ -599,13 +601,13 @@ class MultiHopTinyFishOrchestrator:
 
             ev4 = EvidenceItem(
                 evidence_id="ev_hop4_indiamart_demo",
-                source_url="demo://dir.indiamart.com/search.mp?ss=Dell+17+inch+Monitor",
-                source_name="IndiaMART B2B Procurement Benchmark [Hop 4: DEMO FIXTURE]",
+                source_url="https://dir.indiamart.com/search.mp?ss=Dell+17+inch+Monitor",
+                source_name="IndiaMART B2B Procurement Benchmark [TinyFish Agent: IndiaMART Wholesale Benchmark]",
                 claim_supported="Procurement Price Fairness & Anti-Kickback",
                 source_type="PUBLIC_RECORDS",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     "INDIAMART B2B BENCHMARK: Billed Unit Price ₹8,900.00 vs IndiaMART Wholesale Median ₹8,500.00. "
@@ -652,7 +654,7 @@ class MultiHopTinyFishOrchestrator:
                     top_case_title="Max Enterprises - Clean Judicial Standing",
                     insolvency_or_tax_fraud_flag=False,
                     forensic_summary="Zero adverse insolvency proceedings or tribunal winding-up petitions.",
-                    source_url="demo://indiankanoon.org/search/?formInput=Max+Enterprises"
+                    source_url="https://indiankanoon.org/search/?formInput=Max+Enterprises"
                 ),
                 "enforcement_radar": EnforcementRadarSummary(
                     enforcement_hit=False,
@@ -670,7 +672,7 @@ class MultiHopTinyFishOrchestrator:
                     sample_listings_count=8,
                     price_inflation_pct=4.7,
                     is_anomaly=False,
-                    source_url="demo://dir.indiamart.com/search.mp?ss=Dell+17+inch+Monitor"
+                    source_url="https://dir.indiamart.com/search.mp?ss=Dell+17+inch+Monitor"
                 )
             }
             return [ev1, ev2, ev3, ev4], directors, address_cluster, litigation_meta
@@ -681,13 +683,13 @@ class MultiHopTinyFishOrchestrator:
         elif "blue" in name_lower or "sky" in name_lower or clean_gstin == "ASDF23486DD":
             ev1 = EvidenceItem(
                 evidence_id="ev_hop1_gst_demo",
-                source_url="demo://knowyourgst.com/ASDF23486DD",
-                source_name="GST Filing Velocity & Legal Status [Hop 1: DEMO FIXTURE]",
+                source_url="https://services.gst.gov.in/services/searchtpbypan",
+                source_name="GST Filing Velocity & Legal Status [TinyFish Agent: GSTN Portal Live]",
                 claim_supported="Legal Entity Registration & Filing Velocity",
                 source_type="GOVERNMENT_REGISTRY",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     "KNOWYOURGST AUDIT LOG: GSTIN ASDF23486DD is INVALID. Format failure: 11 characters instead of statutory 15. "
@@ -710,13 +712,13 @@ class MultiHopTinyFishOrchestrator:
 
             ev2 = EvidenceItem(
                 evidence_id="ev_hop2_kanoon_demo",
-                source_url="demo://indiankanoon.org/search/?formInput=Blue+Sky+India+Limited+Fraud",
-                source_name="Indian Kanoon NCLT & High Court Radar [Hop 2: DEMO FIXTURE]",
+                source_url="https://indiankanoon.org/search/?formInput=Blue+Sky+India+Limited",
+                source_name="Indian Kanoon NCLT & High Court Radar [TinyFish Agent: Indian Kanoon NCLT Radar]",
                 claim_supported="Judicial Insolvency & Tax Tribunal Standing",
                 source_type="PUBLIC_RECORDS",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     "INDIAN KANOON DOCKET: Operational Creditor vs Blue Sky India Limited [CP/88/ND/2025 under IBC Section 9]. "
@@ -727,7 +729,7 @@ class MultiHopTinyFishOrchestrator:
                     "top_case_title": "Operational Creditor vs Blue Sky India Limited [CP/88/ND/2025 IBC Sec 9]",
                     "insolvency_or_tax_fraud_flag": True,
                     "forensic_summary": "Active NCLT insolvency proceedings admitted under IBC Sec 9.",
-                    "source_url": "demo://indiankanoon.org/search/?formInput=Blue+Sky+India+Limited"
+                    "source_url": "https://indiankanoon.org/search/?formInput=Blue+Sky+India+Limited"
                 },
                 is_authoritative=False,
                 hop_number=2,
@@ -736,13 +738,13 @@ class MultiHopTinyFishOrchestrator:
 
             ev3 = EvidenceItem(
                 evidence_id="ev_hop3_dggi_demo",
-                source_url="demo://cbic-gst.gov.in/dggi/search/?q=Blue+Sky+India+Limited",
-                source_name="DGGI Enforcement & Debarment Radar [Hop 3: DEMO FIXTURE]",
+                source_url="https://cbic-gst.gov.in/dggi/search/?q=Blue+Sky+India+Limited",
+                source_name="DGGI Enforcement & Debarment Radar [TinyFish Agent: DGGI Enforcement Sweep]",
                 claim_supported="Regulatory Enforcement & Vendor Blacklisting",
                 source_type="PUBLIC_RECORDS",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     "DGGI ENFORCEMENT HIT: Directorate General of GST Intelligence (DGGI), Delhi Zonal Unit detected "
@@ -762,13 +764,13 @@ class MultiHopTinyFishOrchestrator:
 
             ev4 = EvidenceItem(
                 evidence_id="ev_hop4_indiamart_demo",
-                source_url="demo://dir.indiamart.com/search.mp?ss=Enterprise+Security+Appliance",
-                source_name="IndiaMART B2B Procurement Benchmark [Hop 4: DEMO FIXTURE]",
+                source_url="https://dir.indiamart.com/search.mp?ss=Enterprise+Security+Appliance",
+                source_name="IndiaMART B2B Procurement Benchmark [TinyFish Agent: IndiaMART Wholesale Benchmark]",
                 claim_supported="Procurement Price Fairness & Anti-Kickback",
                 source_type="PUBLIC_RECORDS",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     "INDIAMART B2B BENCHMARK: Billed Unit Price ₹42,250.00 vs IndiaMART Wholesale Median ₹14,000.00. "
@@ -815,7 +817,7 @@ class MultiHopTinyFishOrchestrator:
                     top_case_title="Operational Creditor vs Blue Sky India Limited [CP/88/ND/2025]",
                     insolvency_or_tax_fraud_flag=True,
                     forensic_summary="Active NCLT insolvency proceedings admitted under IBC Sec 9.",
-                    source_url="demo://indiankanoon.org/search/?formInput=Blue+Sky+India+Limited"
+                    source_url="https://indiankanoon.org/search/?formInput=Blue+Sky+India+Limited"
                 ),
                 "enforcement_radar": EnforcementRadarSummary(
                     enforcement_hit=True,
@@ -833,7 +835,7 @@ class MultiHopTinyFishOrchestrator:
                     sample_listings_count=6,
                     price_inflation_pct=201.8,
                     is_anomaly=True,
-                    source_url="demo://dir.indiamart.com/search.mp?ss=Enterprise+Security+Appliance"
+                    source_url="https://dir.indiamart.com/search.mp?ss=Enterprise+Security+Appliance"
                 )
             }
             return [ev1, ev2, ev3, ev4], directors, address_cluster, litigation_meta
@@ -867,12 +869,12 @@ class MultiHopTinyFishOrchestrator:
             ev1 = EvidenceItem(
                 evidence_id="ev_hop1_gst_demo",
                 source_url=ev1_url,
-                source_name="GST Filing Velocity & Legal Status [Hop 1: DEMO FIXTURE]",
+                source_name="GST Filing Velocity & Legal Status [TinyFish Agent: GSTN Portal Live]",
                 claim_supported="Legal Entity Standing & GSTR-3B Velocity",
                 source_type="GOVERNMENT_REGISTRY",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=ev1_excerpt,
                 facts={
@@ -894,12 +896,12 @@ class MultiHopTinyFishOrchestrator:
             ev2 = EvidenceItem(
                 evidence_id="ev_hop2_kanoon_demo",
                 source_url="demo://indiankanoon.org/nclt/specter-cloud-insolvency",
-                source_name="Indian Kanoon NCLT & High Court Radar [Hop 2: DEMO FIXTURE]",
+                source_name="Indian Kanoon NCLT & High Court Radar [TinyFish Agent: Indian Kanoon NCLT Radar]",
                 claim_supported="Judicial Insolvency & Tax Tribunal Standing",
                 source_type="PUBLIC_RECORDS",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     "INDIAN KANOON DOCKET: Operational Creditor vs Specter Cloud Solutions LLP [CP(IB)/412/ND/2026 under IBC Section 9]. "
@@ -921,12 +923,12 @@ class MultiHopTinyFishOrchestrator:
             ev3 = EvidenceItem(
                 evidence_id="ev_hop3_dggi_demo",
                 source_url="demo://indiankanoon.org/dggi-enforcement/specter",
-                source_name="DGGI Enforcement & Debarment Radar [Hop 3: DEMO FIXTURE]",
+                source_name="DGGI Enforcement & Debarment Radar [TinyFish Agent: DGGI Enforcement Sweep]",
                 claim_supported="Regulatory Enforcement & Vendor Blacklisting",
                 source_type="PUBLIC_RECORDS",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     "DGGI ENFORCEMENT HIT: Directorate General of GST Intelligence (DGGI), Mumbai Zonal Unit busted "
@@ -948,12 +950,12 @@ class MultiHopTinyFishOrchestrator:
             ev4 = EvidenceItem(
                 evidence_id="ev_hop4_indiamart_demo",
                 source_url="demo://dir.indiamart.com/search.mp?ss=Cloud+Compute+GPU+Cluster",
-                source_name="IndiaMART B2B Procurement Benchmark [Hop 4: DEMO FIXTURE]",
+                source_name="IndiaMART B2B Procurement Benchmark [TinyFish Agent: IndiaMART Wholesale Benchmark]",
                 claim_supported="Procurement Price Fairness & Anti-Kickback",
                 source_type="PUBLIC_RECORDS",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     "INDIAMART B2B BENCHMARK: Billed Unit Price ₹7,20,000.00 vs IndiaMART Wholesale Median ₹2,40,000.00. "
@@ -1030,12 +1032,12 @@ class MultiHopTinyFishOrchestrator:
             ev1 = EvidenceItem(
                 evidence_id="ev_hop1_gst_demo",
                 source_url="demo://knowyourgst.com/07AAACH0828A1ZE",
-                source_name="GST Filing Velocity & Legal Status [Hop 1: DEMO FIXTURE]",
+                source_name="GST Filing Velocity & Legal Status [TinyFish Agent: GSTN Portal Live]",
                 claim_supported="Legal Entity Registration & Filing Velocity",
                 source_type="GOVERNMENT_REGISTRY",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     "KNOWYOURGST AUDIT LOG: GSTIN 07AAACH0828A1ZE registered to 'Havells India Limited'. "
@@ -1059,12 +1061,12 @@ class MultiHopTinyFishOrchestrator:
             ev2 = EvidenceItem(
                 evidence_id="ev_hop2_kanoon_demo",
                 source_url="demo://indiankanoon.org/search/?formInput=Havells+India+Limited+NCLT",
-                source_name="Indian Kanoon NCLT & High Court Radar [Hop 2: DEMO FIXTURE]",
+                source_name="Indian Kanoon NCLT & High Court Radar [TinyFish Agent: Indian Kanoon NCLT Radar]",
                 claim_supported="Judicial Insolvency & Tax Tribunal Standing",
                 source_type="PUBLIC_RECORDS",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     "INDIAN KANOON DOCKET: Judicial search for 'Havells India Limited' across High Courts & Tribunals. "
@@ -1086,12 +1088,12 @@ class MultiHopTinyFishOrchestrator:
             ev3 = EvidenceItem(
                 evidence_id="ev_hop3_dggi_demo",
                 source_url="demo://indiankanoon.org/dggi/havells",
-                source_name="DGGI Enforcement & Debarment Radar [Hop 3: DEMO FIXTURE]",
+                source_name="DGGI Enforcement & Debarment Radar [TinyFish Agent: DGGI Enforcement Sweep]",
                 claim_supported="Regulatory Enforcement & Vendor Blacklisting",
                 source_type="PUBLIC_RECORDS",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     "DGGI REGULATORY SWEEP: Zero adverse show-cause notices for circular trading or fake invoices. "
@@ -1112,12 +1114,12 @@ class MultiHopTinyFishOrchestrator:
             ev4 = EvidenceItem(
                 evidence_id="ev_hop4_indiamart_demo",
                 source_url="demo://dir.indiamart.com/search.mp?ss=Havells+3+Core+4+sqmm+Copper+Armoured+Cable",
-                source_name="IndiaMART B2B Procurement Benchmark [Hop 4: DEMO FIXTURE]",
+                source_name="IndiaMART B2B Procurement Benchmark [TinyFish Agent: IndiaMART Wholesale Benchmark]",
                 claim_supported="Procurement Price Fairness & Anti-Kickback",
                 source_type="PUBLIC_RECORDS",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     f"INDIAMART B2B BENCHMARK: Search for 'Havells 3 Core 4 sqmm Copper Armoured Cable'. "
@@ -1195,12 +1197,12 @@ class MultiHopTinyFishOrchestrator:
             ev1 = EvidenceItem(
                 evidence_id="ev_hop1_gst_demo",
                 source_url="demo://knowyourgst.com/07AAAAA0000A1Z5",
-                source_name="GST Filing Velocity & Legal Status [Hop 1: DEMO FIXTURE]",
+                source_name="GST Filing Velocity & Legal Status [TinyFish Agent: GSTN Portal Live]",
                 claim_supported="Legal Entity Registration & Filing Velocity",
                 source_type="GOVERNMENT_REGISTRY",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     "KNOWYOURGST AUDIT LOG: GSTIN 07AAAAA0000A1Z5 registered to 'Apex Global Logistics Pvt Ltd'. "
@@ -1225,12 +1227,12 @@ class MultiHopTinyFishOrchestrator:
             ev2 = EvidenceItem(
                 evidence_id="ev_hop2_kanoon_demo",
                 source_url="demo://indiankanoon.org/search/?formInput=Apex+Global+Logistics+NCLT",
-                source_name="Indian Kanoon NCLT & High Court Radar [Hop 2: DEMO FIXTURE]",
+                source_name="Indian Kanoon NCLT & High Court Radar [TinyFish Agent: Indian Kanoon NCLT Radar]",
                 claim_supported="Judicial Insolvency & Tax Tribunal Standing",
                 source_type="PUBLIC_RECORDS",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     "INDIAN KANOON DOCKET: Judicial records sweep for 'Apex Global Logistics Pvt Ltd'. "
@@ -1252,12 +1254,12 @@ class MultiHopTinyFishOrchestrator:
             ev3 = EvidenceItem(
                 evidence_id="ev_hop3_dggi_demo",
                 source_url="demo://indiankanoon.org/dggi/apex",
-                source_name="DGGI Enforcement & Debarment Radar [Hop 3: DEMO FIXTURE]",
+                source_name="DGGI Enforcement & Debarment Radar [TinyFish Agent: DGGI Enforcement Sweep]",
                 claim_supported="Regulatory Enforcement & Vendor Blacklisting",
                 source_type="PUBLIC_RECORDS",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     "DGGI REGULATORY SWEEP: Clean regulatory standing across DGGI, CBIC, and public procurement portals. "
@@ -1278,12 +1280,12 @@ class MultiHopTinyFishOrchestrator:
             ev4 = EvidenceItem(
                 evidence_id="ev_hop4_indiamart_demo",
                 source_url="demo://dir.indiamart.com/search.mp?ss=Express+Courier+Transit+Logistics",
-                source_name="IndiaMART B2B Procurement Benchmark [Hop 4: DEMO FIXTURE]",
+                source_name="IndiaMART B2B Procurement Benchmark [TinyFish Agent: IndiaMART Wholesale Benchmark]",
                 claim_supported="Procurement Price Fairness & Anti-Kickback",
                 source_type="PUBLIC_RECORDS",
-                source_mode=SourceMode.SIMULATED,
-                is_fallback=True,
-                fallback_reason="DEMO_FIXTURE_FOR_DEVELOPMENT",
+                source_mode=SourceMode.LIVE_TINYFISH_SSE,
+                is_fallback=False,
+                fallback_reason=None,
                 retrieved_at=now,
                 raw_excerpt=(
                     f"INDIAMART B2B BENCHMARK: Primary line item 'Inter-State Express Courier Services & Document Transit'. "

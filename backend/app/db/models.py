@@ -84,6 +84,8 @@ class EvidenceItemModel(Base):
     facts_json = Column(Text, default="{}")
     is_authoritative = Column(Boolean, default=False)
     match_rationale = Column(Text, nullable=True)
+    hop_number = Column(Integer, nullable=True)
+    hop_title = Column(String(256), nullable=True)
 
     case = relationship("CaseModel", back_populates="evidence_items")
 

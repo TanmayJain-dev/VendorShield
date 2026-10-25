@@ -424,6 +424,23 @@ export default function CaseDetailPage() {
         </div>
       </div>
 
+      {investigating && (
+        <div className="bg-teal-900/15 border-2 border-teal-500/40 rounded-2xl p-5 shadow-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-teal-500/20 flex items-center justify-center text-teal-500 dark:text-teal-400 shrink-0">
+            <RefreshCw className="h-6 w-6 animate-spin" />
+          </div>
+          <div className="space-y-1">
+            <div className="text-sm sm:text-base font-bold text-teal-800 dark:text-teal-300 flex items-center gap-2">
+              <span>🚀 Autonomous 4-Hop TinyFish Forensic Research Active</span>
+              <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 border border-teal-300 dark:border-teal-800">LIVE SSE</span>
+            </div>
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 font-mono">
+              Crawling GSTN filing velocity, NCLT judicial dockets, DGGI circular trading sweeps, and IndiaMART wholesale pricing...
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ==================================================================== */}
       {/* 2. EXECUTIVE VENDOR & INVOICE HERO HEADER CARD */}
       {/* ==================================================================== */}

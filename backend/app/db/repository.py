@@ -122,7 +122,9 @@ class CaseRepository:
                 raw_excerpt=em.raw_excerpt,
                 facts=facts,
                 is_authoritative=em.is_authoritative or False,
-                match_rationale=em.match_rationale
+                match_rationale=em.match_rationale,
+                hop_number=em.hop_number,
+                hop_title=em.hop_title
             ))
 
         # Reconstruct RiskAssessment
@@ -418,7 +420,9 @@ class CaseRepository:
                     raw_excerpt=ev.raw_excerpt,
                     facts_json=json.dumps(ev.facts),
                     is_authoritative=ev.is_authoritative,
-                    match_rationale=ev.match_rationale
+                    match_rationale=ev.match_rationale,
+                    hop_number=ev.hop_number,
+                    hop_title=ev.hop_title
                 )
                 db.add(em)
 

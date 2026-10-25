@@ -80,16 +80,55 @@ class InvoiceClaim(BaseModel):
 
 class InvoiceCorrection(BaseModel):
     corrected_supplier_name: Optional[str] = None
+    supplier_name: Optional[str] = None
     corrected_legal_name: Optional[str] = None
+    legal_name: Optional[str] = None
     corrected_invoice_number: Optional[str] = None
+    invoice_number: Optional[str] = None
     corrected_invoice_date: Optional[str] = None
+    invoice_date: Optional[str] = None
     corrected_gstin: Optional[str] = None
+    gstin: Optional[str] = None
     corrected_taxable_amount: Optional[float] = None
+    taxable_amount: Optional[float] = None
     corrected_cgst: Optional[float] = None
+    cgst: Optional[float] = None
     corrected_sgst: Optional[float] = None
+    sgst: Optional[float] = None
     corrected_igst: Optional[float] = None
+    igst: Optional[float] = None
     corrected_total_amount: Optional[float] = None
+    total_amount: Optional[float] = None
     corrected_bank_account: Optional[str] = None
+    bank_account: Optional[str] = None
     corrected_ifsc_code: Optional[str] = None
+    ifsc_code: Optional[str] = None
     correction_notes: Optional[str] = None
     reviewer_id: Optional[str] = None
+
+
+class DocumentParseResponse(BaseModel):
+    supplier_name: str
+    legal_name: Optional[str] = None
+    gstin: Optional[str] = None
+    gstin_format_valid: Optional[bool] = None
+    gstin_checksum_message: Optional[str] = None
+    invoice_number: str
+    invoice_date: Optional[str] = None
+    total_amount: float = 0.0
+    base_amount: float = 0.0
+    gst_amount: float = 0.0
+    detected_tax_rate: Optional[float] = None
+    line_items: List[LineItem] = Field(default_factory=list)
+    bank_account_masked: Optional[str] = None
+    ifsc_code: Optional[str] = None
+    eway_bill_no: Optional[str] = None
+    irn_hash: Optional[str] = None
+    raw_text_preview: str = ""
+    line_item_arithmetic_valid: Optional[bool] = None
+    extraction_method: str = "PYMUPDF_TEXT"  # "PYMUPDF_TEXT", "RAPIDOCR_ONNX_300DPI", "HEURISTIC_IMAGE_PARSE"
+    extraction_confidence: float = 1.0
+    is_scanned_image: bool = False
+    missing_fields: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+

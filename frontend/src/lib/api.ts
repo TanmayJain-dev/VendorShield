@@ -4,7 +4,8 @@ import {
   ReviewAction,
   ReviewSubmissionRequest,
   InvoiceCorrection,
-  AuditEvent
+  AuditEvent,
+  DocumentParseResponse
 } from '../types/api';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
@@ -36,6 +37,20 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 export const api = {
+  /**
+   * Real-time document parsing and OCR extraction.
+   * Sends file to backend and receives structured telemetry within seconds.
+   */
+  async parseDocument(file: File): Promise<DocumentParseResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE_URL}/cases/parse-document`, {
+      method: 'POST',
+      body: formData
+    });
+    return handleResponse<DocumentParseResponse>(res);
+  },
+
   /**
    * Retrieves all vendor due-diligence cases.
    */
@@ -109,6 +124,13 @@ export const api = {
   },
 
   /**
+   * Alias for triggerInvestigation.
+   */
+  async runInvestigation(caseId: string): Promise<Case> {
+    return this.triggerInvestigation(caseId);
+  },
+
+  /**
    * Submits human reviewer sign-off decision with mandatory rationale.
    * Client provides intent; server generates trusted action_id and timestamps.
    */
@@ -148,6 +170,14 @@ export const api = {
     });
     return handleResponse<Case>(res);
   },
+
+  /**
+   * Alias for correctInvoice with flexible payload types.
+   */
+  async correctClaims(caseId: string, correction: any): Promise<Case> {
+    return this.correctInvoice(caseId, correction);
+  },
+
 
   /**
    * Retrieves the cryptographically chained audit trail for a case.

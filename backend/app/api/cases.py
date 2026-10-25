@@ -7,9 +7,14 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, s
 from sqlalchemy.orm import Session
 
 from ..schemas.case import Case, CaseSummary
-from ..schemas.invoice import InvoiceClaim, InvoiceCorrection, FieldExtractionMeta
+from ..schemas.invoice import InvoiceClaim, InvoiceCorrection, FieldExtractionMeta, DocumentParseResponse
 from ..schemas.enums import CaseStatus, SourceMode, ExtractionStatus
-from ..services.parser.invoice_parser import extract_text_from_pdf_bytes, parse_invoice_text
+from ..services.parser.invoice_parser import (
+    extract_text_from_pdf_bytes,
+    parse_invoice_text,
+    extract_text_and_claims_from_file_bytes,
+    build_document_parse_response
+)
 from ..services.validators.gstin_validator import validate_gstin_format
 from ..services.validators.arithmetic_validator import validate_invoice_arithmetic
 from ..services.reconciler.evidence_reconciler import EvidenceReconciler, normalize_business_name
@@ -45,9 +50,10 @@ def _validate_file_upload(filename: str, content: bytes) -> Tuple[bool, str]:
     is_pdf = content.startswith(b"%PDF-")
     is_png = content.startswith(b"\x89PNG\r\n\x1a\n")
     is_jpeg = content.startswith(b"\xff\xd8")
+    is_webp = content.startswith(b"RIFF") and len(content) > 12 and content[8:12] == b"WEBP"
 
-    if not (is_pdf or is_png or is_jpeg):
-        return False, "Invalid file format. Uploaded file does not match PDF, PNG, or JPEG header specifications."
+    if not (is_pdf or is_png or is_jpeg or is_webp):
+        return False, "Invalid file format. Uploaded file does not match PDF, PNG, JPEG, or WEBP header specifications."
 
     return True, "VALID"
 
@@ -65,6 +71,35 @@ async def list_cases(db: Session = Depends(get_db)):
     CaseRepository.seed_benchmark_case(db)
     return CaseRepository.list_cases(db)
 
+@router.post("/parse-document", response_model=DocumentParseResponse)
+async def parse_document(file: UploadFile = File(...)):
+    """
+    Real-time multi-format document extraction endpoint.
+    Accepts PDF, JPG, JPEG, PNG, and WEBP files up to configured limit.
+    Extracts text via PyMuPDF vector layer or 300 DPI RapidOCR ONNX,
+    runs deterministic GSTIN Modulo-36 & regex extractors,
+    and returns immediate telemetry for form auto-population.
+    """
+    raw_filename = file.filename or "invoice.pdf"
+    safe_filename = _sanitize_filename(raw_filename)
+    content = await file.read()
+
+    is_valid, err_msg = _validate_file_upload(safe_filename, content)
+    if not is_valid:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err_msg)
+
+    claim, extraction_method, confidence = extract_text_and_claims_from_file_bytes(
+        content=content,
+        filename=safe_filename,
+        default_supplier="Unknown Supplier"
+    )
+
+    return build_document_parse_response(
+        claim=claim,
+        extraction_method=extraction_method,
+        extraction_confidence=confidence
+    )
+
 @router.post("", response_model=Case, status_code=status.HTTP_201_CREATED)
 async def create_case(
     file: Optional[UploadFile] = File(None),
@@ -76,6 +111,7 @@ async def create_case(
 ):
     """
     Creates a new due-diligence case from an uploaded invoice or manual payload.
+    Supports PDF and raster image (.jpg, .jpeg, .png, .webp) uploads.
     Enforces upload security, duplicate detection, and persistent storage.
     """
     CaseRepository.seed_benchmark_case(db)
@@ -105,15 +141,11 @@ async def create_case(
             duplicate_type = "EXACT_FILE_DUPLICATE"
             duplicate_case_id = existing_file_case.case_id
 
-        # 2. Extract text & parse
-        extracted_text, is_scanned, ocr_msg, parse_errors = extract_text_from_pdf_bytes(content)
-        invoice_claim = parse_invoice_text(
-            text=extracted_text,
-            default_supplier=supplier_name or "Unknown Supplier",
-            file_bytes=content,
-            is_scanned_image=is_scanned,
-            ocr_status_message=ocr_msg,
-            parsing_errors=parse_errors
+        # 2. Extract text & claims using unified multi-format parser
+        invoice_claim, extraction_method, extraction_confidence = extract_text_and_claims_from_file_bytes(
+            content=content,
+            filename=safe_filename,
+            default_supplier=supplier_name or "Unknown Supplier"
         )
 
         # Override manual fields if explicitly provided in form
@@ -215,6 +247,7 @@ async def get_case(case_id: str, db: Session = Depends(get_db)):
     return case
 
 @router.patch("/{case_id}/invoice", response_model=Case)
+@router.post("/{case_id}/correct", response_model=Case)
 async def correct_invoice_claims(
     case_id: str,
     correction: InvoiceCorrection,
@@ -234,61 +267,74 @@ async def correct_invoice_claims(
     inv = case.invoice
     corrections_applied = {}
 
-    if correction.corrected_supplier_name:
-        corrections_applied["supplier_name"] = {"old": inv.supplier_name, "new": correction.corrected_supplier_name}
-        inv.supplier_name = correction.corrected_supplier_name
+    supp = correction.corrected_supplier_name or correction.supplier_name
+    if supp:
+        corrections_applied["supplier_name"] = {"old": inv.supplier_name, "new": supp}
+        inv.supplier_name = supp
         inv.extraction_metadata["supplier_name"] = FieldExtractionMeta(status=ExtractionStatus.MANUALLY_CORRECTED, confidence=1.0)
 
-    if correction.corrected_legal_name:
-        corrections_applied["legal_name"] = {"old": inv.legal_name, "new": correction.corrected_legal_name}
-        inv.legal_name = correction.corrected_legal_name
+    leg = correction.corrected_legal_name or correction.legal_name
+    if leg:
+        corrections_applied["legal_name"] = {"old": inv.legal_name, "new": leg}
+        inv.legal_name = leg
 
-    if correction.corrected_invoice_number:
-        corrections_applied["invoice_number"] = {"old": inv.invoice_number, "new": correction.corrected_invoice_number}
-        inv.invoice_number = correction.corrected_invoice_number
-        case.case_reference = correction.corrected_invoice_number
+    inv_num = correction.corrected_invoice_number or correction.invoice_number
+    if inv_num:
+        corrections_applied["invoice_number"] = {"old": inv.invoice_number, "new": inv_num}
+        inv.invoice_number = inv_num
+        case.case_reference = inv_num
 
-    if correction.corrected_invoice_date:
-        corrections_applied["invoice_date"] = {"old": inv.invoice_date, "new": correction.corrected_invoice_date}
-        inv.invoice_date = correction.corrected_invoice_date
+    inv_date = correction.corrected_invoice_date or correction.invoice_date
+    if inv_date:
+        corrections_applied["invoice_date"] = {"old": inv.invoice_date, "new": inv_date}
+        inv.invoice_date = inv_date
 
-    if correction.corrected_gstin:
-        corrections_applied["gstin"] = {"old": inv.gstin, "new": correction.corrected_gstin}
-        inv.gstin = correction.corrected_gstin.upper()
+    gst = correction.corrected_gstin or correction.gstin
+    if gst:
+        corrections_applied["gstin"] = {"old": inv.gstin, "new": gst}
+        inv.gstin = gst.upper()
         inv.gstin_format_valid, _ = validate_gstin_format(inv.gstin)
         inv.extraction_metadata["gstin"] = FieldExtractionMeta(status=ExtractionStatus.MANUALLY_CORRECTED, confidence=1.0)
 
-    if correction.corrected_taxable_amount is not None:
-        corrections_applied["taxable_amount"] = {"old": inv.taxable_amount, "new": correction.corrected_taxable_amount}
-        inv.taxable_amount = correction.corrected_taxable_amount
+    tax_amt = correction.corrected_taxable_amount if correction.corrected_taxable_amount is not None else correction.taxable_amount
+    if tax_amt is not None:
+        corrections_applied["taxable_amount"] = {"old": inv.taxable_amount, "new": tax_amt}
+        inv.taxable_amount = tax_amt
         inv.extraction_metadata["taxable_amount"] = FieldExtractionMeta(status=ExtractionStatus.MANUALLY_CORRECTED, confidence=1.0)
 
-    if correction.corrected_cgst is not None:
-        corrections_applied["cgst"] = {"old": inv.cgst, "new": correction.corrected_cgst}
-        inv.cgst = correction.corrected_cgst
+    cgst = correction.corrected_cgst if correction.corrected_cgst is not None else correction.cgst
+    if cgst is not None:
+        corrections_applied["cgst"] = {"old": inv.cgst, "new": cgst}
+        inv.cgst = cgst
 
-    if correction.corrected_sgst is not None:
-        corrections_applied["sgst"] = {"old": inv.sgst, "new": correction.corrected_sgst}
-        inv.sgst = correction.corrected_sgst
+    sgst = correction.corrected_sgst if correction.corrected_sgst is not None else correction.sgst
+    if sgst is not None:
+        corrections_applied["sgst"] = {"old": inv.sgst, "new": sgst}
+        inv.sgst = sgst
 
-    if correction.corrected_igst is not None:
-        corrections_applied["igst"] = {"old": inv.igst, "new": correction.corrected_igst}
-        inv.igst = correction.corrected_igst
+    igst = correction.corrected_igst if correction.corrected_igst is not None else correction.igst
+    if igst is not None:
+        corrections_applied["igst"] = {"old": inv.igst, "new": igst}
+        inv.igst = igst
 
-    if correction.corrected_total_amount is not None:
-        corrections_applied["total_amount"] = {"old": inv.total_amount, "new": correction.corrected_total_amount}
-        inv.total_amount = correction.corrected_total_amount
+    tot_amt = correction.corrected_total_amount if correction.corrected_total_amount is not None else correction.total_amount
+    if tot_amt is not None:
+        corrections_applied["total_amount"] = {"old": inv.total_amount, "new": tot_amt}
+        inv.total_amount = tot_amt
         inv.extraction_metadata["total_amount"] = FieldExtractionMeta(status=ExtractionStatus.MANUALLY_CORRECTED, confidence=1.0)
 
-    if correction.corrected_bank_account:
-        corrections_applied["bank_account"] = {"old": inv.bank_account_masked, "new": correction.corrected_bank_account}
+    bank_ac = correction.corrected_bank_account or correction.bank_account
+    if bank_ac:
+        corrections_applied["bank_account"] = {"old": inv.bank_account_masked, "new": bank_ac}
         # Re-mask
-        cleaned_ac = re.sub(r"\D", "", correction.corrected_bank_account)
+        cleaned_ac = re.sub(r"\D", "", bank_ac)
         inv.bank_account_masked = f"XXXX-XXXX-{cleaned_ac[-4:]}" if len(cleaned_ac) > 4 else "****"
 
-    if correction.corrected_ifsc_code:
-        corrections_applied["ifsc_code"] = {"old": inv.ifsc_code, "new": correction.corrected_ifsc_code}
-        inv.ifsc_code = correction.corrected_ifsc_code.upper()
+    ifsc = correction.corrected_ifsc_code or correction.ifsc_code
+    if ifsc:
+        corrections_applied["ifsc_code"] = {"old": inv.ifsc_code, "new": ifsc}
+        inv.ifsc_code = ifsc.upper()
+
 
     # Re-validate arithmetic after corrections
     arith_valid, arith_notes = validate_invoice_arithmetic(

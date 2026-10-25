@@ -307,6 +307,8 @@ export interface Case {
   audit_hash_sha256?: string;
 }
 
+export type CaseDetail = Case;
+
 export interface CaseSummary {
   case_id: string;
   case_reference: string;
@@ -352,3 +354,30 @@ export interface AuditEvent {
   prev_hash: string;
   event_hash: string;
 }
+
+export interface DocumentParseResponse {
+  supplier_name: string;
+  legal_name?: string;
+  gstin?: string;
+  gstin_format_valid?: boolean;
+  gstin_checksum_message?: string;
+  invoice_number: string;
+  invoice_date?: string;
+  total_amount: number;
+  base_amount: number;
+  gst_amount: number;
+  detected_tax_rate?: number;
+  line_items: LineItem[];
+  bank_account_masked?: string;
+  ifsc_code?: string;
+  eway_bill_no?: string;
+  irn_hash?: string;
+  raw_text_preview: string;
+  line_item_arithmetic_valid?: boolean;
+  extraction_method: string;
+  extraction_confidence: number;
+  is_scanned_image: boolean;
+  missing_fields: string[];
+  warnings: string[];
+}
+

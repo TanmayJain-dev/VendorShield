@@ -1,6 +1,6 @@
 import io
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass, field
 
 logger = logging.getLogger("vendorshield.ocr")
@@ -41,6 +41,26 @@ def is_page_likely_scanned(page, char_threshold: int = 40) -> bool:
         return False
 
 
+def _try_rapidocr(image_bytes: bytes) -> Optional[Tuple[str, float]]:
+    """
+    Attempts OCR using RapidOCR (ONNX Runtime CPU engine - high accuracy, zero external C++ binary dependency).
+    """
+    try:
+        from rapidocr_onnxruntime import RapidOCR
+        engine = RapidOCR()
+        result, _ = engine(image_bytes)
+        if result:
+            lines = [line[1].strip() for line in result if line and len(line) > 1 and line[1]]
+            scores = [float(line[2]) for line in result if line and len(line) > 2]
+            avg_score = sum(scores) / len(scores) if scores else 0.88
+            text = "\n".join(lines).strip()
+            if text:
+                return text, avg_score
+    except Exception as e:
+        logger.debug(f"RapidOCR unavailable or failed: {e}")
+    return None
+
+
 def _try_tesseract(image_bytes: bytes) -> Optional[str]:
     """Attempts OCR via pytesseract if installed and executable configured."""
     try:
@@ -71,10 +91,25 @@ def _try_easyocr(image_bytes: bytes) -> Optional[str]:
 
 def extract_text_from_image(image_bytes: bytes) -> OCRResult:
     """
-    Extracts text from a raster image (PNG, JPG, TIFF) via available OCR engines.
-    Falls back gracefully if no OCR binaries are installed on the host.
+    Extracts text from a raster image (PNG, JPG, JPEG, WEBP, TIFF) via available OCR engines.
+    1. RapidOCR (ONNX Runtime CPU) - primary, reliable, zero C++ binaries required.
+    2. Tesseract OCR - secondary fallback.
+    3. EasyOCR - tertiary fallback.
+    4. Graceful heuristic response if text is empty or engines unavailable.
     """
-    # 1. Try Tesseract
+    # 1. Primary: RapidOCR (ONNX Runtime)
+    rapid_res = _try_rapidocr(image_bytes)
+    if rapid_res:
+        text, conf = rapid_res
+        return OCRResult(
+            text=text,
+            engine="rapidocr",
+            confidence=round(conf, 2),
+            is_scanned=True,
+            page_count=1
+        )
+
+    # 2. Secondary: Tesseract
     tess_text = _try_tesseract(image_bytes)
     if tess_text:
         return OCRResult(
@@ -85,7 +120,7 @@ def extract_text_from_image(image_bytes: bytes) -> OCRResult:
             page_count=1
         )
         
-    # 2. Try EasyOCR
+    # 3. Tertiary: EasyOCR
     easy_text = _try_easyocr(image_bytes)
     if easy_text:
         return OCRResult(
@@ -102,7 +137,7 @@ def extract_text_from_image(image_bytes: bytes) -> OCRResult:
         confidence=0.0,
         is_scanned=True,
         page_count=1,
-        warnings=["No OCR engine (Tesseract or EasyOCR) is currently installed on host system."]
+        warnings=["No OCR engine produced text for this image."]
     )
 
 
@@ -110,8 +145,8 @@ def process_scanned_pdf(pdf_bytes: bytes) -> OCRResult:
     """
     Processes a PDF detected as scanned or rasterized:
     1. Opens PDF with PyMuPDF
-    2. Renders each page to a high-res image (pixmap)
-    3. Runs available OCR engine
+    2. Renders each page to a high-res image (pixmap at 300 DPI)
+    3. Runs available OCR engine (RapidOCR / Tesseract / EasyOCR)
     4. Aggregates multi-page text
     """
     try:
@@ -150,7 +185,7 @@ def process_scanned_pdf(pdf_bytes: bytes) -> OCRResult:
             warnings.extend(page_result.warnings)
 
     combined_text = "\n\n".join(all_texts)
-    confidence = 0.85 if combined_text else 0.0
+    confidence = 0.88 if combined_text else 0.0
 
     return OCRResult(
         text=combined_text,

@@ -146,8 +146,9 @@ def test_scanned_pdf_detection_and_ocr_fallback():
     ocr_result = process_scanned_pdf(scanned_pdf)
     assert ocr_result.is_scanned is True
     assert ocr_result.page_count == 1
-    # Engine is recorded (either tesseract/easyocr or fallback_null if no external OCR binaries on host)
-    assert ocr_result.engine in ["tesseract", "easyocr", "fallback_null", "none"]
+    # Engine is recorded (rapidocr, tesseract, easyocr, or fallback_null if no external OCR binaries on host)
+    assert ocr_result.engine in ["rapidocr", "tesseract", "easyocr", "fallback_null", "none"]
+
 
 
 def test_corrupted_pdf_graceful_handling():

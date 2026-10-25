@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../../lib/api';
+import { DocumentParseResponse } from '../../types/api';
 import {
   UploadCloud,
   FileText,
@@ -13,7 +14,16 @@ import {
   ArrowLeft,
   ShieldCheck,
   Sparkles,
-  Zap
+  Zap,
+  RefreshCw,
+  Eye,
+  ChevronDown,
+  ChevronUp,
+  Check,
+  Copy,
+  Landmark,
+  Truck,
+  AlertTriangle
 } from 'lucide-react';
 
 export default function IntakePage() {
@@ -28,28 +38,80 @@ export default function IntakePage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedScenario, setSelectedScenario] = useState<'havells' | 'benchmark' | 'ghost' | null>('havells');
 
+  // Real-time Extraction States
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractionTelemetry, setExtractionTelemetry] = useState<DocumentParseResponse | null>(null);
+  const [showRawText, setShowRawText] = useState(false);
+  const [copiedRawText, setCopiedRawText] = useState(false);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
+
   const loadHavellsLivePreset = () => {
+    setFile(null);
+    setExtractionTelemetry(null);
+    setMissingFields([]);
     setSupplierName('Havells Industrial Electricals');
     setGstin('07AAACH0828A1ZE');
     setInvoiceNumber('INV-2026-9901');
     setTotalAmount('498550.00');
     setSelectedScenario('havells');
+    setError(null);
   };
 
   const loadBenchmarkPreset = () => {
+    setFile(null);
+    setExtractionTelemetry(null);
+    setMissingFields([]);
     setSupplierName('Apex Courier');
     setGstin('07AAAAA0000A1Z5');
     setInvoiceNumber('INV-2026-8841');
     setTotalAmount('482500.00');
     setSelectedScenario('benchmark');
+    setError(null);
   };
 
   const loadGhostVendorPreset = () => {
+    setFile(null);
+    setExtractionTelemetry(null);
+    setMissingFields([]);
     setSupplierName('Specter Cloud Technologies');
     setGstin('07AAAAA0000A1Z5');
     setInvoiceNumber('INV-2026-8842');
     setTotalAmount('295000.00');
     setSelectedScenario('ghost');
+    setError(null);
+  };
+
+  const handleFileProcess = async (selectedFile: File) => {
+    setFile(selectedFile);
+    setSelectedScenario(null);
+    setError(null);
+    setIsExtracting(true);
+    setExtractionTelemetry(null);
+    setMissingFields([]);
+
+    try {
+      const data = await api.parseDocument(selectedFile);
+      setExtractionTelemetry(data);
+
+      if (data.supplier_name && data.supplier_name !== 'Unknown Supplier') {
+        setSupplierName(data.supplier_name);
+      }
+      if (data.gstin) {
+        setGstin(data.gstin);
+      }
+      if (data.invoice_number) {
+        setInvoiceNumber(data.invoice_number);
+      }
+      if (data.total_amount && data.total_amount > 0) {
+        setTotalAmount(data.total_amount.toFixed(2));
+      }
+      setMissingFields(data.missing_fields || []);
+    } catch (err: any) {
+      console.error('Document extraction error:', err);
+      setError(`Automatic OCR notice: ${err.message || 'Could not parse document'}. You may still verify or manually enter values below.`);
+    } finally {
+      setIsExtracting(false);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -65,15 +127,22 @@ export default function IntakePage() {
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setFile(e.dataTransfer.files[0]);
+      handleFileProcess(e.dataTransfer.files[0]);
     }
+  };
+
+  const handleCopyRawText = () => {
+    if (!extractionTelemetry?.raw_text_preview) return;
+    navigator.clipboard.writeText(extractionTelemetry.raw_text_preview);
+    setCopiedRawText(true);
+    setTimeout(() => setCopiedRawText(false), 2000);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-  
+
     try {
       const formData = new FormData();
       if (file) formData.append('file', file);
@@ -83,7 +152,7 @@ export default function IntakePage() {
       formData.append('total_amount', totalAmount);
 
       const createdCase = await api.createCase(formData);
-      router.push(`/cases/${createdCase.case_id}`);
+      router.push(`/cases/${createdCase.case_id}?auto=true`);
     } catch (err: any) {
       setError(err.message || 'Failed to submit invoice intake.');
       setLoading(false);
@@ -136,20 +205,34 @@ export default function IntakePage() {
               <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
                 Source Invoice Document
               </span>
-              <span className="text-xs text-zinc-400 font-mono">Optional PDF / Scan</span>
+              <span className="text-xs text-zinc-400 font-mono">PDF, PNG, JPG, WEBP (10MB)</span>
             </div>
 
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`border-2 border-dashed rounded-xl p-6 text-center transition-all ${
+              className={`border-2 border-dashed rounded-xl p-5 sm:p-6 text-center transition-all ${
                 isDragging
                   ? 'border-teal-500 bg-teal-50/40 dark:bg-teal-950/40 scale-[1.01]'
                   : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 hover:border-zinc-300 dark:hover:border-zinc-700'
               }`}
             >
-              {file ? (
+              {isExtracting ? (
+                <div className="py-6 flex flex-col items-center justify-center space-y-3">
+                  <div className="w-12 h-12 rounded-xl bg-teal-50 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400 flex items-center justify-center animate-pulse">
+                    <RefreshCw className="h-6 w-6 animate-spin" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-sm font-bold text-teal-700 dark:text-teal-300">
+                      🔄 Extracting invoice telemetry &amp; running Modulo-36 / OCR checks...
+                    </div>
+                    <div className="text-xs text-zinc-500 dark:text-zinc-400 font-mono">
+                      RapidOCR ONNX (300 DPI) &bull; Vector Layer Analysis
+                    </div>
+                  </div>
+                </div>
+              ) : file ? (
                 <div className="flex items-center justify-between p-3.5 rounded-xl bg-teal-50/80 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/60">
                   <div className="flex items-center space-x-3 text-left">
                     <div className="w-10 h-10 rounded-lg bg-teal-600 text-white flex items-center justify-center shrink-0">
@@ -157,12 +240,18 @@ export default function IntakePage() {
                     </div>
                     <div className="truncate max-w-[180px] sm:max-w-[220px]">
                       <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">{file.name}</div>
-                      <div className="text-xs text-zinc-500 dark:text-zinc-400 font-mono">{(file.size / 1024).toFixed(1)} KB &bull; Attached</div>
+                      <div className="text-xs text-zinc-500 dark:text-zinc-400 font-mono">
+                        {(file.size / 1024).toFixed(1)} KB &bull; Parsed &amp; Attached
+                      </div>
                     </div>
                   </div>
                   <button
                     type="button"
-                    onClick={() => setFile(null)}
+                    onClick={() => {
+                      setFile(null);
+                      setExtractionTelemetry(null);
+                      setMissingFields([]);
+                    }}
                     className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                     title="Remove file"
                   >
@@ -175,23 +264,117 @@ export default function IntakePage() {
                     <UploadCloud className="h-6 w-6 stroke-[1.8]" />
                   </div>
                   <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                    Drop vendor invoice PDF here, or{' '}
+                    Drop vendor invoice (PDF, JPG, PNG) here, or{' '}
                     <label className="text-teal-600 dark:text-teal-400 hover:underline cursor-pointer font-bold">
                       browse files
                       <input
                         type="file"
-                        accept=".pdf,.png,.jpg,.jpeg"
-                        onChange={(e) => e.target.files && setFile(e.target.files[0])}
+                        accept=".pdf,.png,.jpg,.jpeg,.webp"
+                        onChange={(e) => e.target.files && e.target.files[0] && handleFileProcess(e.target.files[0])}
                         className="hidden"
                       />
                     </label>
                   </div>
-                  <div className="text-xs text-zinc-400">
-                    Supports PDF documents, TIFF, or image scans up to 10MB
+                  <div className="text-xs text-zinc-400 font-sans">
+                    Supports PDFs, high-res scans, or smartphone invoice photos up to 10MB
                   </div>
                 </div>
               )}
             </div>
+
+            {/* Extracted Document Telemetry Drawer */}
+            {extractionTelemetry && (
+              <div className="p-4 rounded-xl bg-teal-50/60 dark:bg-teal-950/20 border border-teal-200/80 dark:border-teal-800/60 space-y-3 animate-reveal-up text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-teal-500 animate-pulse" />
+                    <span className="font-bold text-teal-900 dark:text-teal-200 text-sm">
+                      Extracted Document Telemetry
+                    </span>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-md font-mono text-[11px] font-bold bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300">
+                    {extractionTelemetry.extraction_method === 'PYMUPDF_TEXT'
+                      ? 'PyMuPDF Text Engine'
+                      : 'RapidOCR ONNX (300 DPI)'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-zinc-700 dark:text-zinc-300">
+                  <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-lg border border-teal-100 dark:border-teal-900/40">
+                    <div className="text-[10px] uppercase font-bold text-zinc-400">Extraction Quality</div>
+                    <div className="font-bold text-emerald-600 dark:text-emerald-400 font-mono mt-0.5">
+                      {(extractionTelemetry.extraction_confidence * 100).toFixed(0)}% Certified
+                    </div>
+                  </div>
+                  <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-lg border border-teal-100 dark:border-teal-900/40">
+                    <div className="text-[10px] uppercase font-bold text-zinc-400">Modulo-36 Checksum</div>
+                    <div className="font-bold font-mono mt-0.5 truncate">
+                      {extractionTelemetry.gstin_format_valid ? (
+                        <span className="text-emerald-600 dark:text-emerald-400">Verified Valid</span>
+                      ) : (
+                        <span className="text-amber-600 dark:text-amber-400">Format Pending</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Extracted Metadata Fields */}
+                <div className="bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-lg border border-teal-100 dark:border-teal-900/40 space-y-1.5">
+                  {extractionTelemetry.line_items && extractionTelemetry.line_items.length > 0 && (
+                    <div className="text-zinc-800 dark:text-zinc-200 font-medium truncate">
+                      <span className="text-zinc-400 font-bold">Item: </span>
+                      {extractionTelemetry.line_items[0].description} ({extractionTelemetry.line_items[0].quantity} @ ₹{extractionTelemetry.line_items[0].unit_price.toLocaleString('en-IN')})
+                    </div>
+                  )}
+                  {extractionTelemetry.ifsc_code && (
+                    <div className="text-zinc-800 dark:text-zinc-200 font-mono text-[11px] flex items-center gap-1.5">
+                      <Landmark className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                      <span>{extractionTelemetry.ifsc_code} {extractionTelemetry.bank_account_masked ? `• ${extractionTelemetry.bank_account_masked}` : ''}</span>
+                    </div>
+                  )}
+                  {extractionTelemetry.eway_bill_no && (
+                    <div className="text-zinc-800 dark:text-zinc-200 font-mono text-[11px] flex items-center gap-1.5">
+                      <Truck className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                      <span>e-Way Bill: {extractionTelemetry.eway_bill_no}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Collapsible Raw Text / OCR Preview */}
+                {extractionTelemetry.raw_text_preview && (
+                  <div className="pt-1">
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => setShowRawText(!showRawText)}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-teal-800 dark:text-teal-300 hover:underline cursor-pointer"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        <span>{showRawText ? 'Hide Raw Text / OCR Snippet' : 'View Extracted Raw Text / OCR Preview'}</span>
+                        {showRawText ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                      </button>
+
+                      {showRawText && (
+                        <button
+                          type="button"
+                          onClick={handleCopyRawText}
+                          className="flex items-center gap-1 text-[11px] font-semibold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                        >
+                          {copiedRawText ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                          <span>{copiedRawText ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {showRawText && (
+                      <div className="mt-2 p-3 bg-zinc-900 text-zinc-200 rounded-lg font-mono text-[11px] leading-relaxed max-h-40 overflow-y-auto">
+                        <pre className="whitespace-pre-wrap font-mono">{extractionTelemetry.raw_text_preview}</pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 1-Click Enterprise Audit Scenarios */}
@@ -329,9 +512,16 @@ export default function IntakePage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-sm">
                 {/* Supplier Name */}
                 <div className="space-y-2">
-                  <label className="block text-zinc-800 dark:text-zinc-200 font-bold text-sm">
-                    Supplier Trade Name <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-zinc-800 dark:text-zinc-200 font-bold text-sm">
+                      Supplier Trade Name <span className="text-rose-500">*</span>
+                    </label>
+                    {missingFields.includes('Supplier Trade Name') && (!supplierName || supplierName === 'Unknown Supplier') && (
+                      <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                        ⚠️ Not detected in scan
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     required
@@ -351,9 +541,16 @@ export default function IntakePage() {
                     <label className="block text-zinc-800 dark:text-zinc-200 font-bold text-sm">
                       Supplier GSTIN <span className="text-rose-500">*</span>
                     </label>
-                    <span className="text-xs text-zinc-400 font-mono font-semibold">
-                      {gstin.length}/15
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {missingFields.includes('Supplier GSTIN') && !gstin && (
+                        <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                          ⚠️ Not detected
+                        </span>
+                      )}
+                      <span className="text-xs text-zinc-400 font-mono font-semibold">
+                        {gstin.length}/15
+                      </span>
+                    </div>
                   </div>
                   <div className="relative">
                     <input
@@ -385,9 +582,16 @@ export default function IntakePage() {
 
                 {/* Invoice Number */}
                 <div className="space-y-2">
-                  <label className="block text-zinc-800 dark:text-zinc-200 font-bold text-sm">
-                    Invoice Number <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-zinc-800 dark:text-zinc-200 font-bold text-sm">
+                      Invoice Number <span className="text-rose-500">*</span>
+                    </label>
+                    {missingFields.includes('Invoice Number') && !invoiceNumber && (
+                      <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                        ⚠️ Not detected
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     required
@@ -403,9 +607,16 @@ export default function IntakePage() {
 
                 {/* Total Amount */}
                 <div className="space-y-2">
-                  <label className="block text-zinc-800 dark:text-zinc-200 font-bold text-sm">
-                    Total Payable Amount (INR) <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-zinc-800 dark:text-zinc-200 font-bold text-sm">
+                      Total Payable Amount (INR) <span className="text-rose-500">*</span>
+                    </label>
+                    {missingFields.includes('Total Payable Amount') && (!totalAmount || parseFloat(totalAmount) <= 0) && (
+                      <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                        ⚠️ Verify Amount
+                      </span>
+                    )}
+                  </div>
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 font-mono text-zinc-400 text-sm font-semibold">
                       ₹
@@ -471,7 +682,7 @@ export default function IntakePage() {
 
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || isExtracting}
                   className="group inline-flex items-center space-x-2 px-6 py-3 rounded-xl text-xs sm:text-sm font-bold text-white bg-teal-700 hover:bg-teal-600 dark:bg-teal-600 dark:hover:bg-teal-500 transition-all duration-200 shadow-md hover:shadow-teal-500/20 active:scale-95 disabled:opacity-50 cursor-pointer"
                 >
                   <span>{loading ? 'Ingesting Claims...' : 'Initiate Forensic Pre-Disbursal Gate'}</span>

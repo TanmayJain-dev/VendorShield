@@ -75,6 +75,8 @@ export default function CaseDetailPage() {
   // Active Hop Tabs
   const [activeHopTab, setActiveHopTab] = useState<'all' | number>('all');
 
+  const [downloadingReport, setDownloadingReport] = useState(false);
+
   const fetchCase = async () => {
     setLoading(true);
     setError(null);
@@ -82,20 +84,31 @@ export default function CaseDetailPage() {
       const data = await api.getCase(caseId);
       setCaseData(data);
       if (data.invoice) {
-        setCorrSupplier(data.invoice.supplier_name);
-        setCorrGstin(data.invoice.gstin);
-        setCorrInvNumber(data.invoice.invoice_number);
-        setCorrTotalAmount(data.invoice.total_amount.toString());
+        setCorrSupplier(data.invoice.supplier_name || '');
+        setCorrGstin(data.invoice.gstin || '');
+        setCorrInvNumber(data.invoice.invoice_number || '');
+        setCorrTotalAmount((data.invoice.total_amount ?? 0).toString());
       }
+      return data;
     } catch (err: any) {
       setError(err.message || 'Failed to load case data.');
+      return null;
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchCase();
+    fetchCase().then((data) => {
+      if (
+        data &&
+        data.status === 'PARSED' &&
+        typeof window !== 'undefined' &&
+        window.location.search.includes('auto=true')
+      ) {
+        handleRunInvestigation();
+      }
+    });
   }, [caseId]);
 
   const handleReviewSubmit = async (e: React.FormEvent) => {
@@ -152,9 +165,26 @@ export default function CaseDetailPage() {
     }
   };
 
-  const handleDownloadReport = () => {
-    window.open(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/cases/${caseId}/audit-trail?format=markdown`, '_blank');
+  const handleDownloadReport = async () => {
+    setDownloadingReport(true);
+    try {
+      const reportMd = await api.downloadReport(caseId);
+      const blob = new Blob([reportMd], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Forensic_Dossier_${caseData?.case_reference || caseId}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(`Failed to download dossier: ${err.message}`);
+    } finally {
+      setDownloadingReport(false);
+    }
   };
+
 
   // Derive Treasury Settlement Breakdown
   const settlement = useMemo(() => {
@@ -371,11 +401,13 @@ export default function CaseDetailPage() {
           <button
             type="button"
             onClick={handleDownloadReport}
-            className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition shadow-2xs cursor-pointer"
+            disabled={downloadingReport}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition shadow-2xs cursor-pointer disabled:opacity-50"
           >
-            <Download className="h-4 w-4 text-zinc-400" />
-            <span>Audit Trail (.MD)</span>
+            <Download className={`h-4 w-4 text-zinc-400 ${downloadingReport ? 'animate-pulse' : ''}`} />
+            <span>{downloadingReport ? 'Downloading Dossier...' : 'Download Markdown Forensic Dossier'}</span>
           </button>
+
 
           {caseData.status === 'PARSED' && (
             <button

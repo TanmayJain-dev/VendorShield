@@ -28,6 +28,9 @@ class InvoiceClaim(BaseModel):
     supplier_name: str  # Trade name as written on invoice
     legal_name: Optional[str] = None
     gstin: Optional[str] = None
+    buyer_name: Optional[str] = None
+    buyer_gstin: Optional[str] = None
+    forensic_anomaly: Optional[str] = None
     billing_address: Optional[str] = None
     place_of_supply: Optional[str] = None
     discount_amount: float = 0.0
@@ -39,8 +42,23 @@ class InvoiceClaim(BaseModel):
     total_amount: float = 0.0
     tax_breakdown: List[TaxBreakdownItem] = Field(default_factory=list)
     bank_account_masked: Optional[str] = None  # Always masked (e.g. XXXX-XXXX-1234)
+    bank_account_hash: Optional[str] = None    # SHA-256 for mutation comparison
+    bank_beneficiary_name: Optional[str] = None
+    bank_mutation_detected: bool = False
+    beneficiary_name_match_score: Optional[float] = 1.0
     ifsc_code: Optional[str] = None
     line_items: List[LineItem] = Field(default_factory=list)
+
+    # Physical Supply & e-Way Bill / IRN (CGST Sec 16(2)(b))
+    irn_hash: Optional[str] = None
+    eway_bill_no: Optional[str] = None
+    vehicle_no: Optional[str] = None
+    eway_bill_required: bool = False
+    eway_bill_missing: bool = False
+
+    # Procurement Price Benchmark
+    market_benchmark_unit_price: Optional[float] = None
+    price_inflation_pct: Optional[float] = None
     
     # Validation state
     gstin_format_valid: Optional[bool] = None
@@ -65,16 +83,58 @@ class InvoiceClaim(BaseModel):
 
 class InvoiceCorrection(BaseModel):
     corrected_supplier_name: Optional[str] = None
+    supplier_name: Optional[str] = None
     corrected_legal_name: Optional[str] = None
+    legal_name: Optional[str] = None
     corrected_invoice_number: Optional[str] = None
+    invoice_number: Optional[str] = None
     corrected_invoice_date: Optional[str] = None
+    invoice_date: Optional[str] = None
     corrected_gstin: Optional[str] = None
+    gstin: Optional[str] = None
     corrected_taxable_amount: Optional[float] = None
+    taxable_amount: Optional[float] = None
     corrected_cgst: Optional[float] = None
+    cgst: Optional[float] = None
     corrected_sgst: Optional[float] = None
+    sgst: Optional[float] = None
     corrected_igst: Optional[float] = None
+    igst: Optional[float] = None
     corrected_total_amount: Optional[float] = None
+    total_amount: Optional[float] = None
     corrected_bank_account: Optional[str] = None
+    bank_account: Optional[str] = None
     corrected_ifsc_code: Optional[str] = None
+    ifsc_code: Optional[str] = None
     correction_notes: Optional[str] = None
     reviewer_id: Optional[str] = None
+
+
+class DocumentParseResponse(BaseModel):
+    supplier_name: str
+    legal_name: Optional[str] = None
+    gstin: Optional[str] = None
+    gstin_format_valid: Optional[bool] = None
+    gstin_checksum_message: Optional[str] = None
+    buyer_name: Optional[str] = None
+    buyer_gstin: Optional[str] = None
+    forensic_anomaly: Optional[str] = None
+    invoice_number: str
+    invoice_date: Optional[str] = None
+    total_amount: Optional[float] = None
+    base_amount: Optional[float] = None
+    gst_amount: Optional[float] = None
+    detected_tax_rate: Optional[float] = None
+    line_items: List[LineItem] = Field(default_factory=list)
+    bank_account_masked: Optional[str] = None
+    ifsc_code: Optional[str] = None
+    eway_bill_no: Optional[str] = None
+    irn_hash: Optional[str] = None
+    raw_text_preview: str = ""
+    line_item_arithmetic_valid: Optional[bool] = None
+    extraction_method: str = "PYMUPDF_TEXT"  # "PYMUPDF_TEXT", "RAPIDOCR_ONNX_300DPI", "HEURISTIC_IMAGE_PARSE"
+    extraction_confidence: float = 1.0
+    is_scanned_image: bool = False
+    missing_fields: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+

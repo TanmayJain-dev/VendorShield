@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import model_validator
-from typing import List
+from pydantic import field_validator, model_validator
+from typing import List, Union
 import os
 
 class Settings(BaseSettings):
@@ -17,6 +17,19 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "https://vendorshield.vercel.app"
     ]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+        if isinstance(v, str):
+            if v.startswith("[") and v.endswith("]"):
+                import json
+                try:
+                    return json.loads(v)
+                except Exception:
+                    pass
+            return [i.strip() for i in v.split(",") if i.strip()]
+        return v
     
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./vendorshield.db")
@@ -34,12 +47,14 @@ class Settings(BaseSettings):
     REVIEWER_DEV_MODE: bool = True
     DEV_REVIEWER_TOKEN: str = os.getenv("DEV_REVIEWER_TOKEN", "vendorshield-dev-review-token-2026")
 
-    # TinyFish API Key (Optional: fallbacks to SIMULATED if unset)
+    # TinyFish API Key & Endpoints
     TINYFISH_API_KEY: str = os.getenv("TINYFISH_API_KEY", "")
-    TINYFISH_API_URL: str = "https://agent.tinyfish.ai/v1/automation/run"
+    TINYFISH_API_URL: str = os.getenv("TINYFISH_API_URL", "https://agent.tinyfish.ai/v1/automation/run")
+    TINYFISH_SSE_URL: str = os.getenv("TINYFISH_SSE_URL", "https://agent.tinyfish.ai/v1/automation/run-sse")
+    TINYFISH_MODE: str = os.getenv("TINYFISH_MODE", "live" if os.getenv("TINYFISH_API_KEY") else "simulated")
     
     # Rules
-    RULES_VERSION: str = "2.0.0"
+    RULES_VERSION: str = "2.1.0"
 
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
@@ -51,3 +66,4 @@ class Settings(BaseSettings):
         return self
 
 settings = Settings()
+

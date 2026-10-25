@@ -50,6 +50,8 @@ yarn-debug.log*
 yarn-error.log*
 .turbo
 *.tsbuildinfo
+package-lock.json
+
 
 # IDE
 .vscode/

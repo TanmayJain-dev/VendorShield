@@ -2,30 +2,221 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #090d16;
-  --foreground: #f1f5f9;
+@layer base {
+  :root {
+    --background: #f8fafc;
+    --foreground: #0f172a;
+    --surface: #ffffff;
+    --surface-subtle: #f1f5f9;
+    --surface-muted: #e2e8f0;
+    --surface-border: #e2e8f0;
+    --color-muted-text: #64748b;
+    --color-border: #e2e8f0;
+
+    /* Semantic Status - Light Mode */
+    --status-pass-bg: #ecfdf5;
+    --status-pass-border: #a7f3d0;
+    --status-pass-text: #065f46;
+    --status-pass-dot: #10b981;
+
+    --status-block-bg: #fff1f2;
+    --status-block-border: #fecdd3;
+    --status-block-text: #9f1239;
+    --status-block-dot: #f43f5e;
+
+    --status-review-bg: #fffbeb;
+    --status-review-border: #fde68a;
+    --status-review-text: #92400e;
+    --status-review-dot: #f59e0b;
+
+    --status-pending-bg: #f8fafc;
+    --status-pending-border: #e2e8f0;
+    --status-pending-text: #475569;
+    --status-pending-dot: #94a3b8;
+  }
+
+  .dark {
+    --background: #080c14;
+    --foreground: #f8fafc;
+    --surface: #0e1420;
+    --surface-subtle: #131b2b;
+    --surface-muted: #1a2438;
+    --surface-border: #1e293b;
+    --color-muted-text: #94a3b8;
+    --color-border: #1e293b;
+
+    /* Semantic Status - Dark Mode */
+    --status-pass-bg: rgba(16, 185, 129, 0.12);
+    --status-pass-border: rgba(16, 185, 129, 0.35);
+    --status-pass-text: #34d399;
+    --status-pass-dot: #10b981;
+
+    --status-block-bg: rgba(244, 63, 94, 0.12);
+    --status-block-border: rgba(244, 63, 94, 0.35);
+    --status-block-text: #fb7185;
+    --status-block-dot: #f43f5e;
+
+    --status-review-bg: rgba(245, 158, 11, 0.12);
+    --status-review-border: rgba(245, 158, 11, 0.35);
+    --status-review-text: #fbbf24;
+    --status-review-dot: #f59e0b;
+
+    --status-pending-bg: rgba(148, 163, 184, 0.08);
+    --status-pending-border: rgba(148, 163, 184, 0.25);
+    --status-pending-text: #cbd5e1;
+    --status-pending-dot: #94a3b8;
+  }
+
+  * {
+    border-color: var(--surface-border);
+  }
+
+  body {
+    color: var(--foreground);
+    background-color: var(--background);
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    min-height: 100vh;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+    letter-spacing: -0.011em;
+  }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  min-height: 100vh;
+/* Tabular numbers for financial & quantitative fields */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
-/* Custom scrollbars */
+/* Custom sleek scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: #0b0f19;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1f2937;
-  border-radius: 3px;
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #1e293b;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #374151;
+  background: #94a3b8;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* 3D Depth & Animation Utilities */
+@keyframes float-slow {
+  0%, 100% {
+    transform: translateY(0px) rotateZ(-6deg) translateZ(-40px);
+  }
+  50% {
+    transform: translateY(-8px) rotateZ(-5deg) translateZ(-40px);
+  }
+}
+
+@keyframes float-shield {
+  0%, 100% {
+    transform: translateY(0px) translateZ(75px);
+  }
+  50% {
+    transform: translateY(6px) translateZ(80px);
+  }
+}
+
+@keyframes float-registry {
+  0%, 100% {
+    transform: translateY(0px) rotateZ(3deg) translateZ(30px);
+  }
+  50% {
+    transform: translateY(-5px) rotateZ(2.5deg) translateZ(32px);
+  }
+}
+
+@keyframes conduit-dash {
+  to {
+    stroke-dashoffset: -40;
+  }
+}
+
+@keyframes radar-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+}
+
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-float-slow {
+  animation: float-slow 7s ease-in-out infinite;
+}
+
+.animate-float-shield {
+  animation: float-shield 6s ease-in-out infinite;
+}
+
+.animate-float-registry {
+  animation: float-registry 6.5s ease-in-out infinite;
+}
+
+.animate-radar-pulse {
+  animation: radar-pulse 3s ease-in-out infinite;
+}
+
+.animate-reveal-up {
+  animation: reveal-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Subtle card layering & hairline borders */
+.fintech-card {
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dark .fintech-card {
+  background: #0e1420;
+  border-color: #1e293b;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35);
+}
+
+.fintech-card:hover {
+  border-color: rgba(20, 184, 166, 0.4);
+}
+
+/* Reduced motion preference respect */
+@media (prefers-reduced-motion: reduce) {
+  .animate-float-slow,
+  .animate-float-shield,
+  .animate-float-registry,
+  .animate-radar-pulse,
+  .animate-reveal-up {
+    animation: none !important;
+    transform: none !important;
+  }
 }

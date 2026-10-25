@@ -12,7 +12,7 @@ from ..schemas.case import Case, CaseSummary
 from ..schemas.invoice import InvoiceClaim, LineItem, TaxBreakdownItem, FieldExtractionMeta
 from ..schemas.evidence import EvidenceItem, FieldCheckResult
 from ..schemas.assessment import RiskAssessment, RuleTrigger
-from ..schemas.forensic_graph import ForensicVectorScores, ITCExposureDetails, EntityGraph
+from ..schemas.forensic_graph import ForensicVectorScores, ITCExposureDetails, EntityGraph, TreasurySettlementDetails
 from ..schemas.review import ReviewAction
 from ..schemas.enums import (
     CaseStatus, SourceMode, RecommendationOutcome, CheckStatus,
@@ -122,7 +122,9 @@ class CaseRepository:
                 raw_excerpt=em.raw_excerpt,
                 facts=facts,
                 is_authoritative=em.is_authoritative or False,
-                match_rationale=em.match_rationale
+                match_rationale=em.match_rationale,
+                hop_number=em.hop_number,
+                hop_title=em.hop_title
             ))
 
         # Reconstruct RiskAssessment
@@ -164,6 +166,19 @@ class CaseRepository:
                 except Exception:
                     pass
 
+            treasury_settlement = None
+            if getattr(am, "treasury_settlement_json", None):
+                try:
+                    treasury_settlement = TreasurySettlementDetails(**json.loads(am.treasury_settlement_json))
+                except Exception:
+                    pass
+            ims_action_json = None
+            if getattr(am, "ims_action_json", None):
+                try:
+                    ims_action_json = json.loads(am.ims_action_json)
+                except Exception:
+                    pass
+
             assessment = RiskAssessment(
                 assessment_id=am.assessment_id,
                 case_id=am.case_id,
@@ -179,6 +194,9 @@ class CaseRepository:
                 forensic_vectors=forensic_vectors,
                 itc_exposure=itc_exposure,
                 entity_graph=entity_graph,
+                treasury_settlement=treasury_settlement,
+                gstn_ims_action=getattr(am, "gstn_ims_action", None),
+                ims_action_json=ims_action_json,
                 evidence_completeness=am.evidence_completeness or "COMPLETE",
                 evidence_provenance_mode=SourceMode(am.evidence_provenance_mode) if am.evidence_provenance_mode in SourceMode.__members__.values() else SourceMode.SIMULATED,
                 human_signoff_required=am.human_signoff_required if am.human_signoff_required is not None else True,
@@ -402,7 +420,9 @@ class CaseRepository:
                     raw_excerpt=ev.raw_excerpt,
                     facts_json=json.dumps(ev.facts),
                     is_authoritative=ev.is_authoritative,
-                    match_rationale=ev.match_rationale
+                    match_rationale=ev.match_rationale,
+                    hop_number=ev.hop_number,
+                    hop_title=ev.hop_title
                 )
                 db.add(em)
 
@@ -415,6 +435,8 @@ class CaseRepository:
             fv_json = json.dumps(ass.forensic_vectors.model_dump()) if getattr(ass, "forensic_vectors", None) else None
             itc_json = json.dumps(ass.itc_exposure.model_dump()) if getattr(ass, "itc_exposure", None) else None
             eg_json = json.dumps(ass.entity_graph.model_dump()) if getattr(ass, "entity_graph", None) else None
+            ts_json = json.dumps(ass.treasury_settlement.model_dump()) if getattr(ass, "treasury_settlement", None) else None
+            ims_payload_json = json.dumps(ass.ims_action_json) if getattr(ass, "ims_action_json", None) else None
 
             if not am:
                 am = AssessmentModel(
@@ -432,6 +454,9 @@ class CaseRepository:
                     forensic_vectors_json=fv_json,
                     itc_exposure_json=itc_json,
                     entity_graph_json=eg_json,
+                    treasury_settlement_json=ts_json,
+                    gstn_ims_action=getattr(ass, "gstn_ims_action", None),
+                    ims_action_json=ims_payload_json,
                     evidence_completeness=ass.evidence_completeness,
                     evidence_provenance_mode=ass.evidence_provenance_mode.value,
                     human_signoff_required=ass.human_signoff_required,
@@ -452,6 +477,9 @@ class CaseRepository:
                 am.forensic_vectors_json = fv_json
                 am.itc_exposure_json = itc_json
                 am.entity_graph_json = eg_json
+                am.treasury_settlement_json = ts_json
+                am.gstn_ims_action = getattr(ass, "gstn_ims_action", None)
+                am.ims_action_json = ims_payload_json
                 am.evidence_completeness = ass.evidence_completeness
                 am.evidence_provenance_mode = ass.evidence_provenance_mode.value
                 am.human_signoff_required = ass.human_signoff_required

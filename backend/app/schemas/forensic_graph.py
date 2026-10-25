@@ -8,6 +8,53 @@ class ForensicVectorScores(BaseModel):
     address_collocation_density: int = Field(..., ge=0, description="Count of independent businesses registered at the identical micro-address")
     operational_grounding_score: float = Field(..., ge=0.0, le=1.0, description="Congruity between physical premises type and invoice scale/goods")
     popup_velocity_factor: float = Field(..., ge=0.0, le=1.0, description="Risk indicator for high-value turnover on newly incorporated entities")
+    # Extended 4-Hop Forensic Signals
+    judicial_insolvency_contagion: Optional[float] = Field(default=None, description="Hop 2: Indian Kanoon NCLT/IBC/GST docket contagion (0.0-1.0)")
+    procurement_price_anomaly: Optional[float] = Field(default=None, description="Hop 4: IndiaMART wholesale price inflation variance (0.0-1.0)")
+    popup_velocity_and_bank_mutation: Optional[float] = Field(default=None, description="Combined velocity and bank account mutation index (0.0-1.0)")
+
+class TreasurySettlementDetails(BaseModel):
+    """
+    Dynamic Treasury Split-Settlement Recommendation & GSTN IMS Portal Action.
+    Resolves the statutory conflict between Income Tax Sec 43B(h) MSME 45-day payment
+    and CGST Sec 16(2)(c) Input Tax Credit clawback protection.
+    """
+    recommendation: str = Field(..., description="FULL_DISBURSAL, STATUTORY_GST_ESCROW, or FORENSIC_FREEZE")
+    release_now_inr: float = Field(..., description="Liquid payout released immediately to vendor")
+    escrow_hold_gst_inr: float = Field(..., description="GST component retained in automated tax escrow until GSTR-3B is verified")
+    statutory_clawback_risk_avoided_inr: float = Field(..., description="Total statutory clawback risk avoided (Tax + 100% Penalty + 18% Interest)")
+    msme_43b_compliant: bool = Field(True, description="True if base amount is disbursed within statutory MSME window")
+    gstn_ims_action: str = Field(..., description="Recommended GSTN IMS action: ACCEPT, PENDING_HOLD, or REJECT")
+    settlement_rationale: str = Field(..., description="Legal and treasury audit rationale")
+    ims_action_payload: Dict[str, Any] = Field(default_factory=dict, description="Structured payload for 1-click GSTN IMS JSON export")
+
+class ProcurementPriceBenchmark(BaseModel):
+    """Hop 4: IndiaMART Wholesale Market Benchmark Result."""
+    item_description: str
+    billed_unit_price: float
+    market_median_price_inr: float = 0.0
+    market_min_price_inr: float = 0.0
+    market_max_price_inr: float = 0.0
+    sample_listings_count: int = 0
+    price_inflation_pct: float = 0.0
+    is_anomaly: bool = False
+    source_url: str = ""
+
+class JudicialDocketSummary(BaseModel):
+    """Hop 2: Indian Kanoon NCLT & GST Litigation Radar."""
+    adverse_docket_count: int = 0
+    top_case_title: Optional[str] = None
+    insolvency_or_tax_fraud_flag: bool = False
+    forensic_summary: str = ""
+    source_url: str = ""
+
+class EnforcementRadarSummary(BaseModel):
+    """Hop 3: DGGI Enforcement & Debarment Radar."""
+    enforcement_hit: bool = False
+    agency_named: str = "None"
+    allegation_summary: str = "Clean regulatory record"
+    risk_severity: str = "LOW"
+    source_url: str = ""
 
 class ITCExposureDetails(BaseModel):
     """

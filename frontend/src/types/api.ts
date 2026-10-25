@@ -10,6 +10,13 @@ export type CaseStatus =
 
 export type RecommendationOutcome = 'PASS' | 'MANUAL_REVIEW' | 'BLOCK';
 
+export type TreasurySettlementRecommendation =
+  | 'FULL_DISBURSAL'
+  | 'STATUTORY_GST_ESCROW'
+  | 'FORENSIC_FREEZE';
+
+export type GSTNIMSAction = 'ACCEPT' | 'PENDING_HOLD' | 'REJECT';
+
 export type CheckStatus =
   | 'MATCH'
   | 'POSSIBLE_MATCH'
@@ -19,14 +26,16 @@ export type CheckStatus =
   | 'STALE_OR_UNCLEAR'
   | 'NOT_APPLICABLE';
 
-export type SourceMode = 'LIVE' | 'SIMULATED' | 'UNAVAILABLE';
+export type SourceMode = 'LIVE' | 'SIMULATED' | 'UNAVAILABLE' | 'LIVE_TINYFISH_SSE';
 
 export type ReviewActionType =
   | 'APPROVE'
   | 'APPROVE_WITH_EXCEPTION'
+  | 'EXECUTE_SPLIT_PAYOUT'
   | 'REQUEST_DOCUMENTS'
   | 'ESCALATE'
-  | 'REJECT';
+  | 'REJECT'
+  | 'FORENSIC_FREEZE';
 
 export type ExtractionStatus =
   | 'EXTRACTED'
@@ -75,7 +84,18 @@ export interface InvoiceClaim {
   total_amount: number;
   tax_breakdown?: TaxBreakdownItem[];
   bank_account_masked?: string;
+  bank_account_hash?: string;
+  bank_beneficiary_name?: string;
+  bank_mutation_detected?: boolean;
+  beneficiary_name_match_score?: number;
   ifsc_code?: string;
+  irn_hash?: string;
+  eway_bill_no?: string;
+  vehicle_no?: string;
+  eway_bill_required?: boolean;
+  eway_bill_missing?: boolean;
+  market_benchmark_unit_price?: number;
+  price_inflation_pct?: number;
   line_items?: LineItem[];
   gstin_format_valid?: boolean;
   arithmetic_valid?: boolean;
@@ -106,6 +126,10 @@ export interface EvidenceItem {
   facts: Record<string, any>;
   is_authoritative: boolean;
   match_rationale?: string;
+  streaming_url?: string;
+  run_id?: string;
+  hop_number?: number;
+  hop_title?: string;
 }
 
 export interface FieldCheckResult {
@@ -140,6 +164,48 @@ export interface ForensicVectorScores {
   address_collocation_density: number;
   operational_grounding_score: number;
   popup_velocity_factor: number;
+  judicial_insolvency_contagion?: number;
+  procurement_price_anomaly?: number;
+  popup_velocity_and_bank_mutation?: number;
+}
+
+export interface ProcurementPriceBenchmark {
+  item_description: string;
+  billed_unit_price: number;
+  market_median_price_inr: number;
+  market_min_price_inr: number;
+  market_max_price_inr: number;
+  sample_listings_count: number;
+  price_inflation_pct: number;
+  is_anomaly: boolean;
+  source_url?: string;
+}
+
+export interface JudicialDocketSummary {
+  adverse_docket_count: number;
+  top_case_title?: string;
+  insolvency_or_tax_fraud_flag: boolean;
+  forensic_summary?: string;
+  source_url?: string;
+}
+
+export interface EnforcementRadarSummary {
+  enforcement_hit: boolean;
+  agency_named?: string;
+  allegation_summary?: string;
+  risk_severity?: string;
+  source_url?: string;
+}
+
+export interface TreasurySettlementDetails {
+  recommendation: TreasurySettlementRecommendation;
+  release_now_inr: number;
+  escrow_hold_gst_inr: number;
+  statutory_clawback_risk_avoided_inr: number;
+  msme_43b_compliant: boolean;
+  gstn_ims_action: GSTNIMSAction;
+  settlement_rationale: string;
+  ims_action_payload?: Record<string, any>;
 }
 
 export interface ITCExposureDetails {
@@ -191,6 +257,11 @@ export interface RiskAssessment {
   entity_graph?: EntityGraph;
   triggered_rules?: RuleTrigger[];
   missing_evidence_items?: string[];
+  treasury_settlement?: TreasurySettlementDetails;
+  gstn_ims_action?: GSTNIMSAction;
+  ims_action_json?: Record<string, any>;
+  streaming_url?: string;
+  run_id?: string;
   evidence_completeness: string;
   evidence_provenance_mode?: SourceMode;
   human_signoff_required: boolean;
@@ -236,6 +307,8 @@ export interface Case {
   audit_hash_sha256?: string;
 }
 
+export type CaseDetail = Case;
+
 export interface CaseSummary {
   case_id: string;
   case_reference: string;
@@ -246,6 +319,8 @@ export interface CaseSummary {
   total_amount: number;
   recommendation?: RecommendationOutcome;
   risk_score?: number;
+  review_status?: string;
+  gstin_claim?: string;
   duplicate_type?: string;
   created_at: string;
 }
@@ -279,3 +354,33 @@ export interface AuditEvent {
   prev_hash: string;
   event_hash: string;
 }
+
+export interface DocumentParseResponse {
+  supplier_name: string;
+  legal_name?: string;
+  gstin?: string;
+  gstin_format_valid?: boolean;
+  gstin_checksum_message?: string;
+  buyer_name?: string;
+  buyer_gstin?: string;
+  forensic_anomaly?: string;
+  invoice_number: string;
+  invoice_date?: string;
+  total_amount?: number | null;
+  base_amount?: number | null;
+  gst_amount?: number | null;
+  detected_tax_rate?: number | null;
+  line_items: LineItem[];
+  bank_account_masked?: string;
+  ifsc_code?: string;
+  eway_bill_no?: string;
+  irn_hash?: string;
+  raw_text_preview: string;
+  line_item_arithmetic_valid?: boolean;
+  extraction_method: string;
+  extraction_confidence: number;
+  is_scanned_image: boolean;
+  missing_fields: string[];
+  warnings: string[];
+}
+

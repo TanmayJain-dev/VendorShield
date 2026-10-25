@@ -84,6 +84,8 @@ class EvidenceItemModel(Base):
     facts_json = Column(Text, default="{}")
     is_authoritative = Column(Boolean, default=False)
     match_rationale = Column(Text, nullable=True)
+    hop_number = Column(Integer, nullable=True)
+    hop_title = Column(String(256), nullable=True)
 
     case = relationship("CaseModel", back_populates="evidence_items")
 
@@ -105,6 +107,9 @@ class AssessmentModel(Base):
     forensic_vectors_json = Column(Text, nullable=True)
     itc_exposure_json = Column(Text, nullable=True)
     entity_graph_json = Column(Text, nullable=True)
+    treasury_settlement_json = Column(Text, nullable=True)
+    gstn_ims_action = Column(String(64), nullable=True)
+    ims_action_json = Column(Text, nullable=True)
     evidence_completeness = Column(String(32), default="COMPLETE")
     evidence_provenance_mode = Column(String(32), default="SIMULATED")
     human_signoff_required = Column(Boolean, default=True)

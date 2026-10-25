@@ -34,7 +34,13 @@ import {
   Search,
   History,
   ShieldX,
-  Truck
+  Truck,
+  Shield,
+  FileCheck2,
+  BadgeAlert,
+  Landmark,
+  Sparkles,
+  CheckCheck
 } from 'lucide-react';
 
 export default function CaseDetailPage() {
@@ -242,15 +248,15 @@ export default function CaseDetailPage() {
 
   if (loading) {
     return (
-      <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-28 text-center text-zinc-900 dark:text-zinc-100">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 mb-4 animate-pulse">
-          <RefreshCw className="h-7 w-7 animate-spin" />
+      <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-32 text-center text-zinc-900 dark:text-zinc-100 animate-reveal-up">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 mb-4 shadow-sm">
+          <RefreshCw className="h-8 w-8 animate-spin" />
         </div>
-        <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-zinc-100 font-mono">
+        <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
           Loading Pre-Disbursal Forensic Dossier...
         </h2>
-        <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1.5">
-          Decrypting cryptographic audit trail &amp; multi-hop web evidence
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2 max-w-md mx-auto">
+          Reconciling TinyFish multi-hop live evidence, GSTN statutory filings, and cryptographic audit trail.
         </p>
       </div>
     );
@@ -258,22 +264,22 @@ export default function CaseDetailPage() {
 
   if (!caseData || !caseData.invoice) {
     return (
-      <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-24 text-center text-zinc-900 dark:text-zinc-100">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 mb-4">
-          <AlertCircle className="h-7 w-7" />
+      <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-28 text-center text-zinc-900 dark:text-zinc-100 animate-reveal-up">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 mb-4 shadow-sm">
+          <AlertCircle className="h-8 w-8" />
         </div>
-        <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 font-mono">
+        <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
           Case or Invoice Records Not Found
         </h2>
-        <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1 max-w-sm mx-auto">
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2 max-w-md mx-auto">
           The requested forensic dossier could not be retrieved from the persistent repository.
         </p>
         <Link
           href="/queue"
-          className="inline-flex items-center gap-2 mt-5 text-sm font-bold text-teal-600 hover:text-teal-500 font-mono"
+          className="inline-flex items-center gap-2 mt-6 px-4 py-2.5 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-sm font-semibold hover:opacity-90 transition shadow-sm"
         >
           <ArrowLeft className="h-4 w-4" />
-          <span>Return to Cases Queue</span>
+          <span>Return to Verification Queue</span>
         </Link>
       </div>
     );
@@ -282,15 +288,19 @@ export default function CaseDetailPage() {
   const { invoice, assessment, evidence_items, review, source_mode, duplicate_type, review_history } = caseData;
 
   const hops = [
-    { num: 1, title: 'GST Velocity & Entity Check', targetDomain: 'knowyourgst.com' },
-    { num: 2, title: 'NCLT & Judicial Insolvency Sweep', targetDomain: 'indiankanoon.org' },
-    { num: 3, title: 'DGGI Enforcement Radar', targetDomain: 'dggi.gov.in / CBIC' },
-    { num: 4, title: 'IndiaMART B2B Price Benchmark', targetDomain: 'dir.indiamart.com' },
+    { num: 1, title: 'GST Velocity & Statutory Registration', targetDomain: 'knowyourgst.com' },
+    { num: 2, title: 'NCLT Insolvency & Judicial Sweep', targetDomain: 'indiankanoon.org' },
+    { num: 3, title: 'DGGI Enforcement Radar & Ghost Hub', targetDomain: 'dggi.gov.in / CBIC' },
+    { num: 4, title: 'IndiaMART Wholesale B2B Benchmark', targetDomain: 'dir.indiamart.com' },
   ];
 
   const filteredEvidence = activeHopTab === 'all' 
     ? evidence_items 
     : evidence_items.filter(e => e.hop_number === activeHopTab);
+
+  const isBlock = assessment?.recommendation === 'BLOCK';
+  const isReview = assessment?.recommendation === 'MANUAL_REVIEW';
+  const isPass = assessment?.recommendation === 'PASS';
 
   return (
     <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 animate-reveal-up text-zinc-900 dark:text-zinc-100">
@@ -298,36 +308,36 @@ export default function CaseDetailPage() {
       {/* ==================================================================== */}
       {/* 1. TOP COMMAND BREADCRUMB & ACTION BAR */}
       {/* ==================================================================== */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-200/80 dark:border-zinc-800/80">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-200/90 dark:border-zinc-800/90">
         <div className="flex items-center gap-2.5 flex-wrap">
           <Link
             href="/queue"
-            className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors mr-1 font-semibold"
+            className="inline-flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors font-medium"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Cases Queue</span>
           </Link>
-          <span className="text-zinc-300 dark:text-zinc-700">/</span>
-          <span className="text-xs sm:text-sm font-mono font-bold px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-zinc-200 dark:border-zinc-700 shadow-xs">
+          <ChevronRight className="h-3.5 w-3.5 text-zinc-400" />
+          <span className="text-sm font-mono font-bold px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-zinc-200 dark:border-zinc-700 shadow-2xs">
             {caseData.case_reference}
           </span>
-          <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400">
-            ID: {caseData.case_id.substring(0, 14)}...
+          <span className="text-xs font-mono text-zinc-400 dark:text-zinc-500">
+            {caseData.case_id}
           </span>
 
           {/* Source Mode Provenance Badge */}
           {source_mode === 'LIVE' || source_mode === 'LIVE_TINYFISH_SSE' ? (
-            <span className="inline-flex items-center gap-2 text-xs font-mono uppercase font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/60 shadow-xs">
+            <span className="inline-flex items-center gap-2 text-xs font-semibold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/60 shadow-2xs">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
-              Live TinyFish SSE Streaming
+              Live TinyFish SSE Pipeline
             </span>
           ) : source_mode === 'SIMULATED' ? (
-            <span className="inline-flex items-center gap-1.5 text-xs font-mono uppercase font-bold px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/60 shadow-xs">
-              <Cpu className="h-3.5 w-3.5" />
-              Simulated Evaluation Fixture
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/60 shadow-2xs">
+              <Cpu className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+              Simulated Evaluation Sandbox
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 text-xs font-mono uppercase font-semibold px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-600 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-zinc-100 text-zinc-600 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700">
               Evidence Unavailable
             </span>
           )}
@@ -338,11 +348,11 @@ export default function CaseDetailPage() {
               href={liveStreamingUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-mono font-bold px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/70 dark:text-indigo-300 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition shadow-xs"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/70 dark:text-indigo-300 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition shadow-2xs"
             >
               <Tv className="h-3.5 w-3.5" />
-              <span>Live Agent Browser View</span>
-              <ExternalLink className="h-3 w-3 ml-0.5 opacity-70" />
+              <span>Live Browser Stream</span>
+              <ExternalLink className="h-3 w-3 opacity-70" />
             </a>
           )}
         </div>
@@ -352,7 +362,7 @@ export default function CaseDetailPage() {
           <button
             type="button"
             onClick={() => setShowEditModal(true)}
-            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold px-3.5 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition shadow-xs cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition shadow-2xs cursor-pointer"
           >
             <Edit3 className="h-4 w-4 text-teal-600 dark:text-teal-400" />
             <span>Correct Claims</span>
@@ -361,7 +371,7 @@ export default function CaseDetailPage() {
           <button
             type="button"
             onClick={handleDownloadReport}
-            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold px-3.5 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition shadow-xs cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition shadow-2xs cursor-pointer"
           >
             <Download className="h-4 w-4 text-zinc-400" />
             <span>Audit Trail (.MD)</span>
@@ -372,7 +382,7 @@ export default function CaseDetailPage() {
               type="button"
               onClick={handleRunInvestigation}
               disabled={investigating}
-              className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white shadow-sm transition disabled:opacity-50 cursor-pointer"
+              className="inline-flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white shadow-sm transition disabled:opacity-50 cursor-pointer"
             >
               <RefreshCw className={`h-4 w-4 ${investigating ? 'animate-spin' : ''}`} />
               <span>{investigating ? 'Executing 4-Hop TinyFish...' : 'Run 4-Hop TinyFish'}</span>
@@ -387,23 +397,34 @@ export default function CaseDetailPage() {
       <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-2xl p-6 sm:p-7 shadow-subtle space-y-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           {/* Vendor Details */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="text-xs font-mono uppercase font-bold text-teal-700 dark:text-teal-400 tracking-wider">
-                Invoiced Counterparty
-              </span>
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              {isBlock ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800">
+                  <BadgeAlert className="h-3.5 w-3.5" /> High-Risk Flagged Counterparty
+                </span>
+              ) : isReview ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800">
+                  <AlertTriangle className="h-3.5 w-3.5" /> Manual Due-Diligence Required
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Verified Clean Counterparty
+                </span>
+              )}
+
               {duplicate_type && (
-                <span className="text-xs font-mono uppercase px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800 flex items-center gap-1 font-bold">
+                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800 flex items-center gap-1">
                   <Copy className="h-3 w-3" /> {duplicate_type}
                 </span>
               )}
             </div>
 
-            <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-zinc-900 dark:text-zinc-50">
+            <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50">
               {invoice.supplier_name}
             </h1>
 
-            <div className="flex items-center gap-3.5 text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 flex-wrap pt-0.5 font-medium">
+            <div className="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-300 flex-wrap pt-0.5 font-medium">
               <span className="flex items-center gap-1.5">
                 <Building2 className="h-4 w-4 text-zinc-400" />
                 <span className="font-semibold text-zinc-800 dark:text-zinc-200">
@@ -411,12 +432,12 @@ export default function CaseDetailPage() {
                 </span>
               </span>
               <span>&bull;</span>
-              <span className="flex items-center gap-2 font-mono">
+              <span className="flex items-center gap-1.5 font-mono">
                 <Hash className="h-4 w-4 text-zinc-400" />
                 <span className="text-zinc-900 dark:text-zinc-100 font-bold">{invoice.gstin || 'GSTIN Missing'}</span>
                 {invoice.gstin_format_valid && (
-                  <span className="text-[10.5px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800 font-bold">
-                    VALID CHECKSUM
+                  <span className="text-[11px] font-sans px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800 font-bold">
+                    Modulo-36 Valid
                   </span>
                 )}
               </span>
@@ -427,44 +448,54 @@ export default function CaseDetailPage() {
             </div>
           </div>
 
-          {/* Financial Summary Block */}
-          <div className="flex items-center gap-6 sm:gap-8 lg:border-l lg:border-zinc-200/80 dark:lg:border-zinc-800/80 lg:pl-8 flex-shrink-0">
+          {/* Financial Summary & Compliance Scorecard */}
+          <div className="flex items-center gap-6 sm:gap-8 lg:border-l lg:border-zinc-200/90 dark:lg:border-zinc-800/90 lg:pl-8 flex-shrink-0">
             <div>
-              <span className="text-xs font-mono uppercase text-zinc-500 dark:text-zinc-400 block font-bold tracking-wider">
+              <span className="text-xs uppercase tracking-wider text-zinc-400 font-bold block">
                 Total Invoiced Value
               </span>
-              <div className="text-3xl sm:text-4xl font-mono font-black text-zinc-900 dark:text-zinc-50 mt-1">
+              <div className="text-3xl sm:text-4xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50 tabular-nums mt-1 font-sans">
                 &#8377;{invoice.total_amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </div>
-              <div className="text-xs sm:text-sm font-mono text-zinc-500 dark:text-zinc-400 mt-1">
-                Taxable: &#8377;{invoice.taxable_amount.toLocaleString('en-IN')} &bull; GST (18%): &#8377;{(invoice.cgst + invoice.sgst + invoice.igst).toLocaleString('en-IN')}
+              <div className="flex items-center gap-2 mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                <span className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 font-medium">
+                  Taxable: &#8377;{invoice.taxable_amount.toLocaleString('en-IN')}
+                </span>
+                <span className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 font-medium">
+                  GST (18%): &#8377;{(invoice.cgst + invoice.sgst + invoice.igst).toLocaleString('en-IN')}
+                </span>
               </div>
             </div>
 
-            {/* Compliance Score Pill */}
+            {/* Compliance Scorecard */}
             {assessment && (
               <div className="text-right pl-2">
-                <span className="text-xs font-mono uppercase text-zinc-500 dark:text-zinc-400 block font-bold tracking-wider">
+                <span className="text-xs uppercase tracking-wider text-zinc-400 font-bold block">
                   Compliance Score
                 </span>
-                <div className={`text-3xl font-mono font-black mt-1 ${
+                <div className={`text-3xl sm:text-4xl font-extrabold tracking-tight tabular-nums mt-1 font-sans ${
                   assessment.risk_score && assessment.risk_score >= 80 
                     ? 'text-emerald-600 dark:text-emerald-400' 
                     : assessment.risk_score && assessment.risk_score >= 50
                     ? 'text-amber-600 dark:text-amber-400'
                     : 'text-rose-600 dark:text-rose-400'
                 }`}>
-                  {assessment.risk_score ?? 0}<span className="text-sm text-zinc-400 font-normal">/100</span>
+                  {assessment.risk_score ?? 0}<span className="text-sm text-zinc-400 font-medium">/100</span>
                 </div>
-                <span className={`inline-block text-xs font-mono font-bold uppercase px-3 py-1 rounded-lg mt-1 shadow-2xs ${
-                  assessment.recommendation === 'PASS' 
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800' 
-                    : assessment.recommendation === 'MANUAL_REVIEW'
-                    ? 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800'
-                    : 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950 dark:text-rose-400 dark:border-rose-800'
-                }`}>
-                  {assessment.recommendation}
-                </span>
+                <div className="mt-1">
+                  <span className={`inline-flex items-center gap-1 text-xs font-bold uppercase px-3 py-1 rounded-lg shadow-2xs ${
+                    isPass 
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800' 
+                      : isReview
+                      ? 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800'
+                      : 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950 dark:text-rose-400 dark:border-rose-800'
+                  }`}>
+                    {isPass && <CheckCheck className="h-3.5 w-3.5" />}
+                    {isReview && <AlertTriangle className="h-3.5 w-3.5" />}
+                    {isBlock && <ShieldX className="h-3.5 w-3.5" />}
+                    <span>{assessment.recommendation}</span>
+                  </span>
+                </div>
               </div>
             )}
           </div>
@@ -472,32 +503,49 @@ export default function CaseDetailPage() {
       </div>
 
       {/* ==================================================================== */}
-      {/* 3. 🚀 HERO PRE-DISBURSAL TREASURY SPLIT & 2026 GSTN IMS GATE */}
+      {/* 3. 🚀 EXECUTIVE PRE-DISBURSAL TREASURY GATE & 2026 GSTN IMS SHIELD */}
       {/* ==================================================================== */}
       {settlement && (
-        <div className="relative overflow-hidden rounded-2xl border border-indigo-200/90 dark:border-indigo-800/80 bg-gradient-to-br from-indigo-50/70 via-white to-slate-50 dark:from-[#0d1424] dark:via-[#0e1628] dark:to-[#090e1a] p-6 sm:p-7 shadow-subtle space-y-6">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-indigo-100 dark:border-indigo-900/40">
+        <div className={`relative overflow-hidden rounded-2xl border p-6 sm:p-7 shadow-subtle space-y-6 ${
+          settlement.recommendation === 'FORENSIC_FREEZE'
+            ? 'border-rose-200/90 dark:border-rose-900/50 bg-gradient-to-br from-rose-50/70 via-white to-zinc-50 dark:from-[#180a0e] dark:via-[#0e1420] dark:to-[#080c14]'
+            : settlement.recommendation === 'STATUTORY_GST_ESCROW'
+            ? 'border-amber-200/90 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/70 via-white to-indigo-50/30 dark:from-[#181308] dark:via-[#0e1420] dark:to-[#080c14]'
+            : 'border-emerald-200/90 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/30 dark:from-[#081812] dark:via-[#0e1420] dark:to-[#080c14]'
+        }`}>
+          {/* Top Directive Header */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-zinc-200/70 dark:border-zinc-800/70">
             <div>
-              <div className="flex items-center gap-2.5 flex-wrap mb-1.5">
-                <span className="text-xs font-mono font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/90 px-3 py-1 rounded-full dark:bg-indigo-950 dark:text-indigo-300 dark:border dark:border-indigo-800 shadow-2xs">
-                  Pre-Disbursal Treasury Gate
+              <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                <span className={`text-xs font-bold px-3 py-1 rounded-full shadow-2xs flex items-center gap-1.5 ${
+                  settlement.recommendation === 'FORENSIC_FREEZE'
+                    ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                    : settlement.recommendation === 'STATUTORY_GST_ESCROW'
+                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                }`}>
+                  <Shield className="h-3.5 w-3.5" />
+                  <span>Pre-Disbursal Treasury Gate</span>
                 </span>
-                <span className="text-xs font-mono text-zinc-600 dark:text-zinc-400 font-medium">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
                   Income Tax Sec 43B(h) MSME Mandate vs CGST Sec 16(2)(c) Safe-Harbor
                 </span>
               </div>
-              <h2 className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-zinc-50 flex items-center gap-3">
+
+              <h2 className="text-xl sm:text-2xl font-extrabold text-zinc-900 dark:text-zinc-50 flex items-center gap-3">
                 <span>Treasury Directive:</span>
-                <span className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-mono font-bold tracking-wide shadow-xs ${
+                <span className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold tracking-wide shadow-2xs ${
                   settlement.recommendation === 'FULL_DISBURSAL' 
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-700'
+                    ? 'bg-emerald-100 text-emerald-900 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-700'
                     : settlement.recommendation === 'STATUTORY_GST_ESCROW'
-                    ? 'bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-700'
-                    : 'bg-rose-100 text-rose-900 border border-rose-300 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-700'
+                    ? 'bg-amber-100 text-amber-950 border border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-700'
+                    : 'bg-rose-100 text-rose-950 border border-rose-300 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-700'
                 }`}>
                   {settlement.recommendation === 'STATUTORY_GST_ESCROW' 
-                    ? 'STATUTORY GST ESCROW (SPLIT PAYOUT)' 
-                    : settlement.recommendation}
+                    ? '⚖️ STATUTORY GST ESCROW (SPLIT PAYOUT)' 
+                    : settlement.recommendation === 'FORENSIC_FREEZE'
+                    ? '🛑 FORENSIC FREEZE (RELEASE HALTED)'
+                    : '✅ FULL DISBURSAL APPROVED'}
                 </span>
               </h2>
             </div>
@@ -505,10 +553,10 @@ export default function CaseDetailPage() {
             {/* GSTN IMS Portal Action & 1-Click Export */}
             <div className="flex items-center gap-3.5 flex-shrink-0">
               <div className="text-right">
-                <span className="text-xs font-mono uppercase text-zinc-500 dark:text-zinc-400 block font-bold tracking-wider">
-                  2026 GSTN IMS Portal Action
+                <span className="text-xs uppercase text-zinc-400 font-bold block">
+                  2026 GSTN IMS Action
                 </span>
-                <span className={`inline-block px-3 py-1 rounded-lg font-mono font-black text-xs uppercase mt-1 ${
+                <span className={`inline-block px-3 py-1 rounded-lg font-bold text-xs uppercase mt-1 ${
                   imsAction === 'ACCEPT'
                     ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-700'
                     : imsAction === 'PENDING_HOLD'
@@ -522,7 +570,7 @@ export default function CaseDetailPage() {
               <button
                 type="button"
                 onClick={handleExportIMSJson}
-                className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-mono font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition active:scale-98 cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition active:scale-98 cursor-pointer"
               >
                 {copiedIMS ? <Check className="h-4 w-4 text-emerald-300" /> : <Download className="h-4 w-4" />}
                 <span>{copiedIMS ? 'IMS JSON Exported!' : 'Export GSTN IMS JSON'}</span>
@@ -533,53 +581,61 @@ export default function CaseDetailPage() {
           {/* 3-Column Financial Matrix */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
             {/* Box 1: Immediate MSME Payout */}
-            <div className="p-5 rounded-2xl bg-white/95 dark:bg-[#090f1a] border border-zinc-200/90 dark:border-zinc-800 space-y-1.5 shadow-xs">
-              <div className="flex items-center justify-between text-xs font-mono text-zinc-500 dark:text-zinc-400 font-bold">
-                <span>Immediate Base Payout</span>
-                <span className="text-emerald-600 dark:text-emerald-400">&bull; Sec 43B(h)</span>
+            <div className="p-5 rounded-2xl bg-white dark:bg-[#0c121e] border border-zinc-200/90 dark:border-zinc-800 space-y-2 shadow-2xs">
+              <div className="flex items-center justify-between text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                <span className="flex items-center gap-1.5 font-bold text-zinc-800 dark:text-zinc-200">
+                  <Landmark className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+                  Immediate Base Disbursal
+                </span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-bold">Sec 43B(h)</span>
               </div>
-              <div className="text-2xl sm:text-3xl font-mono font-black text-emerald-600 dark:text-emerald-400">
+              <div className="text-3xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400 tabular-nums font-sans">
                 &#8377;{settlement.release_now_inr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </div>
-              <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 leading-snug">
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed font-sans">
                 Disbursed immediately within 15–45 days to eliminate buyer Income Tax disallowance risk.
               </p>
             </div>
 
             {/* Box 2: GST Escrow Holdback */}
-            <div className="p-5 rounded-2xl bg-white/95 dark:bg-[#090f1a] border border-zinc-200/90 dark:border-zinc-800 space-y-1.5 shadow-xs">
-              <div className="flex items-center justify-between text-xs font-mono text-zinc-500 dark:text-zinc-400 font-bold">
-                <span>Statutory 18% GST Escrow</span>
-                <span className="text-amber-600 dark:text-amber-400">&bull; Auto-Escrow</span>
+            <div className="p-5 rounded-2xl bg-white dark:bg-[#0c121e] border border-zinc-200/90 dark:border-zinc-800 space-y-2 shadow-2xs">
+              <div className="flex items-center justify-between text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                <span className="flex items-center gap-1.5 font-bold text-zinc-800 dark:text-zinc-200">
+                  <Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                  Statutory 18% GST Escrow
+                </span>
+                <span className="text-amber-600 dark:text-amber-400 font-bold">Auto-Escrow</span>
               </div>
-              <div className="text-2xl sm:text-3xl font-mono font-black text-amber-600 dark:text-amber-400">
+              <div className="text-3xl font-extrabold tracking-tight text-amber-600 dark:text-amber-400 tabular-nums font-sans">
                 &#8377;{settlement.escrow_hold_gst_inr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </div>
-              <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 leading-snug">
-                Retained in automated tax escrow until supplier confirms GSTR-3B tax remittance on the 20th.
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed font-sans">
+                Retained in automated tax escrow until supplier confirms GSTR-3B tax payment on GSTN portal.
               </p>
             </div>
 
             {/* Box 3: Total Clawback Risk Avoided */}
-            <div className="p-5 rounded-2xl bg-white/95 dark:bg-[#090f1a] border border-zinc-200/90 dark:border-zinc-800 space-y-1.5 shadow-xs">
-              <div className="flex items-center justify-between text-xs font-mono text-zinc-500 dark:text-zinc-400 font-bold">
-                <span>Clawback Liability Avoided</span>
-                <span className="text-rose-600 dark:text-rose-400 flex items-center gap-1">
-                  <TrendingDown className="h-3.5 w-3.5" /> Sec 74 Protection
+            <div className="p-5 rounded-2xl bg-white dark:bg-[#0c121e] border border-zinc-200/90 dark:border-zinc-800 space-y-2 shadow-2xs">
+              <div className="flex items-center justify-between text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                <span className="flex items-center gap-1.5 font-bold text-zinc-800 dark:text-zinc-200">
+                  <TrendingDown className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+                  Clawback Liability Avoided
                 </span>
+                <span className="text-rose-600 dark:text-rose-400 font-bold">Sec 74 Shield</span>
               </div>
-              <div className="text-2xl sm:text-3xl font-mono font-black text-rose-600 dark:text-rose-400">
+              <div className="text-3xl font-extrabold tracking-tight text-rose-600 dark:text-rose-400 tabular-nums font-sans">
                 &#8377;{settlement.statutory_clawback_risk_avoided_inr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </div>
-              <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 leading-snug">
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed font-sans">
                 Avoids 100% Tax + 100% Section 74 Penalty + 18% Section 50 statutory interest liability.
               </p>
             </div>
           </div>
 
-          {/* Rationale Notice */}
-          <div className="p-4 bg-white/90 dark:bg-[#080d18] rounded-xl border border-indigo-100 dark:border-indigo-950 text-xs sm:text-sm text-zinc-800 dark:text-zinc-200 font-mono leading-relaxed">
-            <strong className="text-indigo-700 dark:text-indigo-400 font-bold">Directive Rationale:</strong> {settlement.settlement_rationale}
+          {/* Rationale Advisory Notice */}
+          <div className="p-4 bg-white/95 dark:bg-[#090d16] rounded-xl border border-zinc-200/80 dark:border-zinc-800 text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed font-sans">
+            <span className="font-bold text-indigo-700 dark:text-indigo-400 mr-2">Advisory Directive:</span>
+            {settlement.settlement_rationale}
           </div>
         </div>
       )}
@@ -591,22 +647,22 @@ export default function CaseDetailPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200/80 dark:border-zinc-800/80 pb-3.5">
           <div className="flex items-center gap-2.5">
             <Radio className="h-4.5 w-4.5 text-teal-600 dark:text-teal-400 animate-pulse" />
-            <h2 className="text-sm sm:text-base font-bold uppercase tracking-wider text-zinc-900 dark:text-zinc-100 font-mono">
-              TinyFish 4-Hop Live Agentic Web Infrastructure
+            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+              TinyFish 4-Hop Autonomous Web Agent Telemetry
             </h2>
-            <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 font-semibold">
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
               CAPTCHA-Free Pipeline
             </span>
           </div>
 
           {/* Hop Selector Filter Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto text-xs font-mono">
+          <div className="flex items-center gap-1.5 overflow-x-auto text-xs font-sans">
             <button
               type="button"
               onClick={() => setActiveHopTab('all')}
               className={`px-3.5 py-1.5 rounded-lg transition font-bold cursor-pointer ${
                 activeHopTab === 'all'
-                  ? 'bg-teal-600 text-white shadow-xs'
+                  ? 'bg-teal-600 text-white shadow-2xs'
                   : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
               }`}
             >
@@ -619,7 +675,7 @@ export default function CaseDetailPage() {
                 onClick={() => setActiveHopTab(h.num)}
                 className={`px-3 py-1.5 rounded-lg transition whitespace-nowrap font-bold cursor-pointer ${
                   activeHopTab === h.num
-                    ? 'bg-teal-600 text-white shadow-xs'
+                    ? 'bg-teal-600 text-white shadow-2xs'
                     : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
                 }`}
               >
@@ -640,10 +696,10 @@ export default function CaseDetailPage() {
               <div
                 key={h.num}
                 onClick={() => setActiveHopTab(h.num)}
-                className={`cursor-pointer p-4.5 rounded-2xl border text-xs sm:text-sm space-y-3 transition-all ${
+                className={`cursor-pointer p-4.5 rounded-2xl border text-sm space-y-3 transition-all ${
                   activeHopTab === h.num
-                    ? 'border-teal-500 bg-teal-50/40 dark:bg-teal-950/20 ring-2 ring-teal-500/30 shadow-xs'
-                    : 'border-zinc-200/90 dark:border-zinc-800 bg-zinc-50/50 dark:bg-[#090d18] hover:border-zinc-300 dark:hover:border-zinc-700'
+                    ? 'border-teal-500 bg-teal-50/40 dark:bg-teal-950/20 ring-2 ring-teal-500/30 shadow-2xs'
+                    : 'border-zinc-200/90 dark:border-zinc-800 bg-zinc-50/60 dark:bg-[#090d18] hover:border-zinc-300 dark:hover:border-zinc-700'
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -651,15 +707,15 @@ export default function CaseDetailPage() {
                     HOP {h.num}
                   </span>
                   {isLive ? (
-                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" /> LIVE SSE
                     </span>
                   ) : isUnavail ? (
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
                       UNAVAILABLE
                     </span>
                   ) : (
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 font-bold">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
                       SIMULATED
                     </span>
                   )}
@@ -674,8 +730,8 @@ export default function CaseDetailPage() {
                 </div>
 
                 {ev && (
-                  <div className="pt-2.5 border-t border-zinc-200/60 dark:border-zinc-800/80 text-xs text-zinc-700 dark:text-zinc-300 font-mono truncate font-medium">
-                    {ev.facts?.status || ev.facts?.gst_status || ev.facts?.top_case_title || (ev.facts?.market_median_price_inr ? `₹${ev.facts.market_median_price_inr} wholesale` : 'Findings verified')}
+                  <div className="pt-2.5 border-t border-zinc-200/70 dark:border-zinc-800/80 text-xs text-zinc-700 dark:text-zinc-300 truncate font-semibold">
+                    {ev.facts?.status || ev.facts?.gst_status || ev.facts?.top_case_title || (ev.facts?.market_median_price_inr ? `₹${ev.facts.market_median_price_inr} wholesale` : 'Verified finding')}
                   </div>
                 )}
               </div>
@@ -686,7 +742,7 @@ export default function CaseDetailPage() {
         {/* Detailed Hop Dossier Items */}
         <div className="space-y-3.5 pt-1">
           {filteredEvidence.map((ev, idx) => (
-            <div key={ev.evidence_id || idx} className="p-4 sm:p-5 rounded-xl bg-zinc-50/90 dark:bg-[#080d18] border border-zinc-200/90 dark:border-zinc-800 text-xs sm:text-sm space-y-3.5 shadow-2xs">
+            <div key={ev.evidence_id || idx} className="p-5 rounded-2xl bg-zinc-50/90 dark:bg-[#080d18] border border-zinc-200/90 dark:border-zinc-800 text-sm space-y-3.5 shadow-2xs">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-zinc-200/60 dark:border-zinc-800/80 pb-3">
                 <div className="flex items-center gap-2.5 flex-wrap">
                   {ev.hop_number && (
@@ -698,12 +754,12 @@ export default function CaseDetailPage() {
                     {ev.source_name.replace(/\[DEMO FIXTURE\]\s*/g, '')}
                   </span>
                   {ev.source_mode === 'LIVE' ? (
-                    <span className="text-[10px] font-mono uppercase font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                    <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                       LIVE TINYFISH SSE
                     </span>
                   ) : (
-                    <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 font-bold">
-                      SIMULATED FALLBACK
+                    <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                      SIMULATED EVALUATION
                     </span>
                   )}
                 </div>
@@ -714,7 +770,7 @@ export default function CaseDetailPage() {
                       href={ev.streaming_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-xs font-mono text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-bold"
+                      className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
                     >
                       <Tv className="h-3.5 w-3.5" /> Stream Session
                     </a>
@@ -724,29 +780,29 @@ export default function CaseDetailPage() {
                       href={ev.source_url.startsWith('http') ? ev.source_url : '#'}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-xs font-mono text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 font-semibold"
+                      className="text-xs font-semibold text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1"
                     >
-                      <span>Evidence Link</span>
+                      <span>Direct Source</span>
                       <ExternalLink className="h-3.5 w-3.5" />
                     </a>
                   )}
-                  <span className="text-xs font-mono text-zinc-400">
+                  <span className="text-xs text-zinc-400">
                     {ev.retrieved_at ? new Date(ev.retrieved_at).toLocaleTimeString() : 'Verified'}
                   </span>
                 </div>
               </div>
 
               {/* Forensic Excerpt */}
-              <div className="bg-white dark:bg-zinc-950 p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800/80 font-mono text-xs sm:text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed shadow-2xs">
+              <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800/80 font-mono text-xs sm:text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed shadow-2xs">
                 {ev.raw_excerpt}
               </div>
 
               {/* Extracted Structured JSON Facts Pills */}
               {ev.facts && Object.keys(ev.facts).length > 0 && (
-                <div className="flex flex-wrap gap-2 text-xs font-mono">
+                <div className="flex flex-wrap gap-2 text-xs font-sans">
                   {Object.entries(ev.facts).map(([k, v]) => (
                     <span key={k} className="px-3 py-1 rounded-lg bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-800 shadow-2xs font-semibold">
-                      <span className="text-zinc-400 dark:text-zinc-500 font-normal">{k}:</span> <strong>{String(v)}</strong>
+                      <span className="text-zinc-400 dark:text-zinc-500 font-normal">{k}:</span> <strong className="font-mono">{String(v)}</strong>
                     </span>
                   ))}
                 </div>
@@ -762,53 +818,53 @@ export default function CaseDetailPage() {
       {assessment && (
         <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-2xl p-6 sm:p-7 shadow-subtle space-y-5">
           <div className="flex items-center justify-between border-b border-zinc-200/80 dark:border-zinc-800/80 pb-3.5">
-            <span className="text-xs sm:text-sm font-mono font-bold uppercase tracking-wider text-zinc-800 dark:text-zinc-200">
+            <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
               5-Vector Forensic Risk Topology
             </span>
-            <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400 font-semibold">
-              Deterministic Weights &bull; CGST Sec 16(2)(c) &amp; IBC Sec 7/9
+            <span className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+              Deterministic Rules &bull; CGST Sec 16(2)(c) &amp; IBC Sec 7/9
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5 text-center text-xs sm:text-sm">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5 text-center text-sm">
             <div className="bg-zinc-50 dark:bg-zinc-900/80 p-4 rounded-xl border border-zinc-200/80 dark:border-zinc-800 space-y-1.5 shadow-2xs">
-              <span className="text-xs text-zinc-500 dark:text-zinc-400 block font-mono font-bold">1. ITC Clawback</span>
-              <div className="text-xl sm:text-2xl font-mono font-black text-teal-600 dark:text-teal-400">
+              <span className="text-xs text-zinc-500 dark:text-zinc-400 block font-bold">1. ITC Clawback</span>
+              <div className="text-2xl font-extrabold text-teal-600 dark:text-teal-400 tabular-nums">
                 {Math.round((assessment.forensic_vectors?.itc_clawback_risk_index || 0) * 100)}%
               </div>
               <span className="text-xs text-zinc-400 block font-medium">CGST Sec 16(2)(c)</span>
             </div>
 
             <div className="bg-zinc-50 dark:bg-zinc-900/80 p-4 rounded-xl border border-zinc-200/80 dark:border-zinc-800 space-y-1.5 shadow-2xs">
-              <span className="text-xs text-zinc-500 dark:text-zinc-400 block font-mono font-bold">2. Judicial Contagion</span>
-              <div className="text-xl sm:text-2xl font-mono font-black text-rose-600 dark:text-rose-400">
+              <span className="text-xs text-zinc-500 dark:text-zinc-400 block font-bold">2. Judicial Contagion</span>
+              <div className="text-2xl font-extrabold text-rose-600 dark:text-rose-400 tabular-nums">
                 {Math.round((assessment.forensic_vectors?.judicial_insolvency_contagion || assessment.forensic_vectors?.director_shell_contagion_score || 0) * 100)}%
               </div>
               <span className="text-xs text-zinc-400 block font-medium">NCLT &amp; IBC Sec 9</span>
             </div>
 
             <div className="bg-zinc-50 dark:bg-zinc-900/80 p-4 rounded-xl border border-zinc-200/80 dark:border-zinc-800 space-y-1.5 shadow-2xs">
-              <span className="text-xs text-zinc-500 dark:text-zinc-400 block font-mono font-bold">3. Price Anomaly</span>
-              <div className="text-xl sm:text-2xl font-mono font-black text-amber-600 dark:text-amber-400">
+              <span className="text-xs text-zinc-500 dark:text-zinc-400 block font-bold">3. Price Anomaly</span>
+              <div className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 tabular-nums">
                 {Math.round((assessment.forensic_vectors?.procurement_price_anomaly || 0) * 100)}%
               </div>
               <span className="text-xs text-zinc-400 block font-medium">IndiaMART Wholesale</span>
             </div>
 
             <div className="bg-zinc-50 dark:bg-zinc-900/80 p-4 rounded-xl border border-zinc-200/80 dark:border-zinc-800 space-y-1.5 shadow-2xs">
-              <span className="text-xs text-zinc-500 dark:text-zinc-400 block font-mono font-bold">4. Grounding (e-Way)</span>
-              <div className="text-xl sm:text-2xl font-mono font-black text-emerald-600 dark:text-emerald-400">
+              <span className="text-xs text-zinc-500 dark:text-zinc-400 block font-bold">4. Grounding (e-Way)</span>
+              <div className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums">
                 {Math.round((assessment.forensic_vectors?.operational_grounding_score || 0) * 100)}%
               </div>
-              <span className="text-xs text-zinc-400 block font-medium">Physical Movement</span>
+              <span className="text-xs text-zinc-400 block font-medium">Physical Transit</span>
             </div>
 
             <div className="bg-zinc-50 dark:bg-zinc-900/80 p-4 rounded-xl border border-zinc-200/80 dark:border-zinc-800 space-y-1.5 shadow-2xs">
-              <span className="text-xs text-zinc-500 dark:text-zinc-400 block font-mono font-bold">5. Pop-Up / BEC Guard</span>
-              <div className="text-xl sm:text-2xl font-mono font-black text-purple-600 dark:text-purple-400">
+              <span className="text-xs text-zinc-500 dark:text-zinc-400 block font-bold">5. Pop-Up / BEC Guard</span>
+              <div className="text-2xl font-extrabold text-purple-600 dark:text-purple-400 tabular-nums">
                 {Math.round((assessment.forensic_vectors?.popup_velocity_and_bank_mutation || assessment.forensic_vectors?.popup_velocity_factor || 0) * 100)}%
               </div>
-              <span className="text-xs text-zinc-400 block font-medium">Bank Mutation Alert</span>
+              <span className="text-xs text-zinc-400 block font-medium">Mutation Alert</span>
             </div>
           </div>
         </div>
@@ -821,65 +877,65 @@ export default function CaseDetailPage() {
         {/* Left Col: Remittance Security & Physical Transit */}
         <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-2xl p-6 space-y-4 shadow-subtle">
           <div className="flex items-center justify-between border-b border-zinc-200/80 dark:border-zinc-800/80 pb-3">
-            <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-zinc-900 dark:text-zinc-100 font-mono">
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
               Remittance &amp; Transit Claims
             </h2>
             <button
               type="button"
               onClick={() => setShowEditModal(true)}
-              className="text-xs font-mono text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 font-bold"
+              className="text-xs font-semibold text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1"
             >
               <Edit3 className="h-3.5 w-3.5" /> Edit
             </button>
           </div>
 
-          <div className="space-y-4 text-xs sm:text-sm">
+          <div className="space-y-4 text-sm">
             {/* Anti-BEC Bank Account Mutation Guard */}
             <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900/90 border border-zinc-200/80 dark:border-zinc-800 space-y-2 shadow-2xs">
-              <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400 uppercase tracking-wider font-bold block">
+              <span className="text-xs text-zinc-400 uppercase tracking-wider font-bold block">
                 Remittance Bank Account (Anti-BEC)
               </span>
               <div className="font-mono text-zinc-900 dark:text-zinc-100 flex items-center justify-between font-bold text-sm">
                 <span>{invoice.bank_account_masked || 'XXXX-XXXX-9921'}</span>
                 {invoice.bank_mutation_detected ? (
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800 font-black">
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
                     BEC MUTATION!
                   </span>
                 ) : (
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-black">
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                     VERIFIED MASTER
                   </span>
                 )}
               </div>
-              <div className="text-xs font-mono text-zinc-500 dark:text-zinc-400">
-                IFSC: <strong>{invoice.ifsc_code || 'HDFC0001234'}</strong> &bull; Beneficiary Match: <strong>{invoice.beneficiary_name_match_score ? `${Math.round(invoice.beneficiary_name_match_score * 100)}%` : '92%'}</strong>
+              <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                IFSC: <strong className="font-mono">{invoice.ifsc_code || 'HDFC0001234'}</strong> &bull; Beneficiary Match: <strong>{invoice.beneficiary_name_match_score ? `${Math.round(invoice.beneficiary_name_match_score * 100)}%` : '92%'}</strong>
               </div>
             </div>
 
             {/* Physical Supply Transit (CGST Sec 16(2)(b)) */}
             <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900/90 border border-zinc-200/80 dark:border-zinc-800 space-y-2 shadow-2xs">
-              <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400 uppercase tracking-wider font-bold block flex items-center gap-1.5">
+              <span className="text-xs text-zinc-400 uppercase tracking-wider font-bold block flex items-center gap-1.5">
                 <Truck className="h-4 w-4 text-teal-600 dark:text-teal-400" /> Physical Movement (Sec 16(2)(b))
               </span>
-              <div className="font-mono text-zinc-900 dark:text-zinc-100 flex items-center justify-between text-xs sm:text-sm font-bold">
+              <div className="font-mono text-zinc-900 dark:text-zinc-100 flex items-center justify-between text-sm font-bold">
                 <span>e-Way Bill: {invoice.eway_bill_no || '241098765432'}</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-sans">
                   VERIFIED
                 </span>
               </div>
-              <div className="text-xs font-mono text-zinc-500 dark:text-zinc-400">
-                Vehicle: <strong>{invoice.vehicle_no || 'DL-1GC-4491'}</strong> &bull; IRN: <strong>{invoice.irn_hash ? `${invoice.irn_hash.substring(0, 10)}...` : 'Verified'}</strong>
+              <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                Vehicle: <strong className="font-mono">{invoice.vehicle_no || 'DL-1GC-4491'}</strong> &bull; IRN: <strong>{invoice.irn_hash ? `${invoice.irn_hash.substring(0, 10)}...` : 'Verified'}</strong>
               </div>
             </div>
 
             <div className="pt-1 space-y-2.5">
               <div>
-                <span className="text-xs font-mono text-zinc-400 block font-semibold">Billing Address</span>
+                <span className="text-xs text-zinc-400 block font-semibold">Billing Address</span>
                 <span className="text-sm text-zinc-800 dark:text-zinc-200">{invoice.billing_address || 'Not specified'}</span>
               </div>
               <div>
-                <span className="text-xs font-mono text-zinc-400 block font-semibold">Place of Supply</span>
-                <span className="font-mono text-sm text-zinc-800 dark:text-zinc-200 font-semibold">{invoice.place_of_supply || 'Delhi (07)'}</span>
+                <span className="text-xs text-zinc-400 block font-semibold">Place of Supply</span>
+                <span className="text-sm text-zinc-800 dark:text-zinc-200 font-semibold">{invoice.place_of_supply || 'Delhi (07)'}</span>
               </div>
             </div>
           </div>
@@ -888,7 +944,7 @@ export default function CaseDetailPage() {
         {/* Right 2 Cols: Field Reconciliations */}
         <div className="lg:col-span-2 space-y-4">
           <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-2xl p-6 sm:p-7 shadow-subtle space-y-5">
-            <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-zinc-900 dark:text-zinc-100 font-mono border-b border-zinc-200/80 dark:border-zinc-800/80 pb-3">
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 border-b border-zinc-200/80 dark:border-zinc-800/80 pb-3">
               Deterministic Statutory Reconciliations
             </h2>
 
@@ -898,7 +954,7 @@ export default function CaseDetailPage() {
                   <div key={chk.check_id} className="py-4 first:pt-0 last:pb-0 space-y-2">
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-bold text-zinc-900 dark:text-zinc-100">{chk.field_name}</span>
-                      <span className={`text-xs font-mono uppercase px-2.5 py-0.5 rounded-md font-bold ${
+                      <span className={`text-xs font-bold uppercase px-3 py-1 rounded-md ${
                         chk.status === 'MATCH'
                           ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800'
                           : chk.status === 'POSSIBLE_MATCH'
@@ -910,7 +966,7 @@ export default function CaseDetailPage() {
                         {chk.status}
                       </span>
                     </div>
-                    <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed font-sans">
+                    <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed font-sans">
                       {chk.explanation}
                     </p>
                   </div>
@@ -932,7 +988,7 @@ export default function CaseDetailPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200/80 dark:border-zinc-800/80 pb-3.5">
           <div className="flex items-center gap-2.5">
             <Lock className="h-5 w-5 text-teal-600 dark:text-teal-400" />
-            <h2 className="text-sm sm:text-base font-bold uppercase tracking-wider text-zinc-900 dark:text-zinc-100 font-mono">
+            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
               Human Reviewer Decision &amp; Audit Seal
             </h2>
           </div>
@@ -952,26 +1008,26 @@ export default function CaseDetailPage() {
         {review ? (
           <div className="p-5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 text-sm space-y-2.5 shadow-2xs">
             <div className="flex items-center justify-between">
-              <span className="font-mono text-emerald-700 dark:text-emerald-300 font-black uppercase text-base flex items-center gap-2">
+              <span className="text-emerald-700 dark:text-emerald-300 font-bold uppercase text-base flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                 Decision Recorded: {review.action}
               </span>
-              <span className="font-mono text-xs text-zinc-400">{review.recorded_at ? new Date(review.recorded_at).toLocaleString() : ''}</span>
+              <span className="text-xs text-zinc-400 font-mono">{review.recorded_at ? new Date(review.recorded_at).toLocaleString() : ''}</span>
             </div>
             <div>
-              <span className="text-zinc-500 dark:text-zinc-400 font-mono text-xs font-bold">Authorized Reviewer: </span>
+              <span className="text-zinc-500 dark:text-zinc-400 text-xs font-bold">Authorized Reviewer: </span>
               <span className="font-bold text-zinc-900 dark:text-zinc-100">{review.reviewer_id} ({review.reviewer_role || 'ap_analyst'})</span>
             </div>
             <div>
-              <span className="text-zinc-500 dark:text-zinc-400 font-mono text-xs font-bold">Audit Rationale: </span>
-              <p className="text-zinc-800 dark:text-zinc-200 mt-1 font-mono text-xs sm:text-sm leading-relaxed">{review.rationale}</p>
+              <span className="text-zinc-500 dark:text-zinc-400 text-xs font-bold">Audit Rationale: </span>
+              <p className="text-zinc-800 dark:text-zinc-200 mt-1 text-sm leading-relaxed">{review.rationale}</p>
             </div>
           </div>
         ) : (
           <form onSubmit={handleReviewSubmit} className="space-y-5 text-sm">
             {/* 3 Quick-Action Decision Cards */}
             <div>
-              <label className="block text-zinc-700 dark:text-zinc-300 font-mono text-xs sm:text-sm mb-2.5 font-bold uppercase tracking-wider">
+              <label className="block text-zinc-700 dark:text-zinc-300 text-sm mb-2.5 font-bold">
                 Select Treasury Settlement Action:
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
@@ -980,15 +1036,15 @@ export default function CaseDetailPage() {
                   onClick={() => selectReviewOption('APPROVE', 'Approve 100% full payment disbursal. All 4 TinyFish hops verified clean.')}
                   className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
                     reviewAction === 'APPROVE'
-                      ? 'border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/30 shadow-xs'
+                      ? 'border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/30 shadow-2xs'
                       : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
                   }`}
                 >
-                  <div className="font-black text-sm flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                  <div className="font-bold text-sm flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
                     <CheckCircle2 className="h-4 w-4" />
                     <span>Approve 100% Disbursal</span>
                   </div>
-                  <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 font-mono">
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5">
                     GSTN IMS Action: <strong>ACCEPT</strong>
                   </div>
                 </button>
@@ -1001,15 +1057,15 @@ export default function CaseDetailPage() {
                   )}
                   className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
                     reviewAction === 'EXECUTE_SPLIT_PAYOUT'
-                      ? 'border-amber-600 dark:border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 ring-2 ring-amber-500/30 shadow-xs'
+                      ? 'border-amber-600 dark:border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 ring-2 ring-amber-500/30 shadow-2xs'
                       : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
                   }`}
                 >
-                  <div className="font-black text-sm flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                  <div className="font-bold text-sm flex items-center gap-2 text-amber-700 dark:text-amber-400">
                     <Layers className="h-4 w-4" />
                     <span>Execute Split-Payout</span>
                   </div>
-                  <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 font-mono">
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5">
                     Release Base &bull; Escrow GST &bull; IMS: <strong>PENDING</strong>
                   </div>
                 </button>
@@ -1022,15 +1078,15 @@ export default function CaseDetailPage() {
                   )}
                   className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
                     reviewAction === 'FORENSIC_FREEZE' || reviewAction === 'REJECT'
-                      ? 'border-rose-600 dark:border-rose-500 bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 ring-2 ring-rose-500/30 shadow-xs'
+                      ? 'border-rose-600 dark:border-rose-500 bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 ring-2 ring-rose-500/30 shadow-2xs'
                       : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
                   }`}
                 >
-                  <div className="font-black text-sm flex items-center gap-2 text-rose-700 dark:text-rose-400">
+                  <div className="font-bold text-sm flex items-center gap-2 text-rose-700 dark:text-rose-400">
                     <ShieldX className="h-4 w-4" />
                     <span>Forensic Freeze</span>
                   </div>
-                  <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 font-mono">
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5">
                     Halt 100% Release &bull; IMS: <strong>REJECT</strong>
                   </div>
                 </button>
@@ -1039,7 +1095,7 @@ export default function CaseDetailPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-1">
               <div className="space-y-1.5">
-                <label className="block text-zinc-700 dark:text-zinc-300 font-mono text-xs font-bold">
+                <label className="block text-zinc-700 dark:text-zinc-300 text-xs font-bold">
                   Reviewer Identity
                 </label>
                 <input
@@ -1052,13 +1108,13 @@ export default function CaseDetailPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-zinc-700 dark:text-zinc-300 font-mono text-xs font-bold">
+                <label className="block text-zinc-700 dark:text-zinc-300 text-xs font-bold">
                   Selected Action
                 </label>
                 <select
                   value={reviewAction}
                   onChange={(e) => setReviewAction(e.target.value as ReviewActionType)}
-                  className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-zinc-900 dark:text-zinc-100 font-mono text-sm focus:outline-none focus:border-teal-500 shadow-2xs"
+                  className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-zinc-900 dark:text-zinc-100 text-sm focus:outline-none focus:border-teal-500 shadow-2xs"
                 >
                   <option value="APPROVE">APPROVE (100% Disbursal &bull; IMS: ACCEPT)</option>
                   <option value="EXECUTE_SPLIT_PAYOUT">EXECUTE_SPLIT_PAYOUT (Release Base &bull; Escrow GST &bull; IMS: PENDING)</option>
@@ -1072,7 +1128,7 @@ export default function CaseDetailPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-zinc-700 dark:text-zinc-300 font-mono text-xs font-bold">
+              <label className="block text-zinc-700 dark:text-zinc-300 text-xs font-bold">
                 Mandatory Review Rationale (Saved to Tamper-Evident Chained Audit Trail) *
               </label>
               <textarea
@@ -1081,7 +1137,7 @@ export default function CaseDetailPage() {
                 placeholder="State verified trade-name alias, statutory escrow reasons, or reason for action..."
                 value={rationale}
                 onChange={(e) => setRationale(e.target.value)}
-                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-teal-500 shadow-2xs font-mono text-sm"
+                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-teal-500 shadow-2xs text-sm"
               />
             </div>
 
@@ -1104,18 +1160,18 @@ export default function CaseDetailPage() {
         <div className="bg-white dark:bg-[#0e1420] border border-zinc-200/90 dark:border-zinc-800/90 rounded-2xl p-6 space-y-4 shadow-subtle">
           <div className="flex items-center gap-2 border-b border-zinc-200/80 dark:border-zinc-800/80 pb-3">
             <History className="h-4.5 w-4.5 text-teal-600 dark:text-teal-400" />
-            <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-zinc-900 dark:text-zinc-100 font-mono">
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
               Reviewer Activity History ({review_history.length})
             </h2>
           </div>
           <div className="space-y-2.5">
             {review_history.map(rh => (
-              <div key={rh.action_id} className="p-3.5 bg-zinc-50 dark:bg-zinc-900/80 border border-zinc-200/80 dark:border-zinc-800 rounded-xl text-xs sm:text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div key={rh.action_id} className="p-3.5 bg-zinc-50 dark:bg-zinc-900/80 border border-zinc-200/80 dark:border-zinc-800 rounded-xl text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 <div>
-                  <span className="font-mono text-teal-700 dark:text-teal-400 font-bold uppercase mr-2.5">[{rh.action}]</span>
+                  <span className="text-teal-700 dark:text-teal-400 font-bold uppercase mr-2.5">[{rh.action}]</span>
                   <span className="text-zinc-800 dark:text-zinc-200 font-medium">{rh.rationale}</span>
                 </div>
-                <div className="text-xs font-mono text-zinc-400 flex items-center gap-2 shrink-0">
+                <div className="text-xs text-zinc-400 flex items-center gap-2 shrink-0">
                   <span>{rh.reviewer_id}</span>
                   <span>&bull;</span>
                   <span>{rh.recorded_at ? new Date(rh.recorded_at).toLocaleTimeString() : ''}</span>
@@ -1133,7 +1189,7 @@ export default function CaseDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-reveal-up">
           <div className="bg-white dark:bg-[#0e1420] border border-zinc-200 dark:border-zinc-700 rounded-2xl max-w-lg w-full p-6 sm:p-7 space-y-5 shadow-2xl">
             <div className="flex items-center justify-between border-b border-zinc-200/80 dark:border-zinc-800/80 pb-3.5">
-              <h3 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-zinc-100 font-mono flex items-center gap-2">
+              <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                 <Edit3 className="h-4.5 w-4.5 text-teal-600 dark:text-teal-400" />
                 <span>Correct Invoice Claims &amp; Rerun Assessment</span>
               </h3>
@@ -1146,45 +1202,45 @@ export default function CaseDetailPage() {
               </button>
             </div>
 
-            <form onSubmit={handleCorrectionSubmit} className="space-y-4 text-xs sm:text-sm">
+            <form onSubmit={handleCorrectionSubmit} className="space-y-4 text-sm">
               <div className="space-y-1.5">
-                <label className="block text-zinc-700 dark:text-zinc-300 font-mono text-xs font-bold">
+                <label className="block text-zinc-700 dark:text-zinc-300 text-xs font-bold">
                   Supplier Trade Name
                 </label>
                 <input
                   type="text"
                   value={corrSupplier}
                   onChange={(e) => setCorrSupplier(e.target.value)}
-                  className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-zinc-900 dark:text-zinc-100 font-medium focus:outline-none focus:border-teal-500 shadow-2xs"
+                  className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-zinc-900 dark:text-zinc-100 font-medium focus:outline-none focus:border-teal-500 shadow-2xs"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-zinc-700 dark:text-zinc-300 font-mono text-xs font-bold">
+                <label className="block text-zinc-700 dark:text-zinc-300 text-xs font-bold">
                   Supplier GSTIN
                 </label>
                 <input
                   type="text"
                   value={corrGstin}
                   onChange={(e) => setCorrGstin(e.target.value.toUpperCase())}
-                  className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-zinc-900 dark:text-zinc-100 font-mono font-bold focus:outline-none focus:border-teal-500 shadow-2xs"
+                  className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-zinc-900 dark:text-zinc-100 font-mono font-bold focus:outline-none focus:border-teal-500 shadow-2xs"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3.5">
                 <div className="space-y-1.5">
-                  <label className="block text-zinc-700 dark:text-zinc-300 font-mono text-xs font-bold">
+                  <label className="block text-zinc-700 dark:text-zinc-300 text-xs font-bold">
                     Invoice Number
                   </label>
                   <input
                     type="text"
                     value={corrInvNumber}
                     onChange={(e) => setCorrInvNumber(e.target.value)}
-                    className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-zinc-900 dark:text-zinc-100 font-mono focus:outline-none focus:border-teal-500 shadow-2xs"
+                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-zinc-900 dark:text-zinc-100 font-mono focus:outline-none focus:border-teal-500 shadow-2xs"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="block text-zinc-700 dark:text-zinc-300 font-mono text-xs font-bold">
+                  <label className="block text-zinc-700 dark:text-zinc-300 text-xs font-bold">
                     Total Amount (&#8377;)
                   </label>
                   <input
@@ -1192,13 +1248,13 @@ export default function CaseDetailPage() {
                     step="0.01"
                     value={corrTotalAmount}
                     onChange={(e) => setCorrTotalAmount(e.target.value)}
-                    className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-zinc-900 dark:text-zinc-100 font-mono font-bold focus:outline-none focus:border-teal-500 shadow-2xs"
+                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-zinc-900 dark:text-zinc-100 font-mono font-bold focus:outline-none focus:border-teal-500 shadow-2xs"
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-zinc-700 dark:text-zinc-300 font-mono text-xs font-bold">
+                <label className="block text-zinc-700 dark:text-zinc-300 text-xs font-bold">
                   Correction Rationale / Notes
                 </label>
                 <input
@@ -1206,7 +1262,7 @@ export default function CaseDetailPage() {
                   placeholder="e.g. Corrected OCR typo in GSTIN character 14"
                   value={corrNotes}
                   onChange={(e) => setCorrNotes(e.target.value)}
-                  className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-teal-500 shadow-2xs text-xs sm:text-sm"
+                  className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-teal-500 shadow-2xs text-sm"
                 />
               </div>
 
